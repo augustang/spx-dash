@@ -1,0 +1,419 @@
+"""Trading page — Flask Blueprint."""
+from __future__ import annotations
+
+import time
+import datetime
+
+import pandas as pd
+import plotly.graph_objects as go
+from flask import Blueprint, render_template, request, session, jsonify
+
+import schwab_client
+from shared.cache import cache
+from shared.chart import create_spx_chart
+from shared.events import get_financial_events
+
+trading_bp = Blueprint('trading', __name__)
+
+# ── Default session store ────────────────────────────────────────────────────
+
+_DEFAULT_STORE = {
+    "selected_short": None, "selected_long": None, "selected_spread_px": 0.0,
+    "saved_entry": 0.0, "saved_close": 0.05,
+    "saved_bp": 150000, "saved_spread": 10, "saved_contracts": 150,
+    "saved_target": 1500, "last_selected_short": None,
+}
+
+
+def _get_store() -> dict:
+    if 'trade' not in session:
+        session['trade'] = dict(_DEFAULT_STORE)
+    return session['trade']
+
+
+def _save_store(store: dict) -> None:
+    session['trade'] = store
+    session.modified = True
+
+
+# ── Cached data fetchers ─────────────────────────────────────────────────────
+
+@cache.memoize(timeout=60)
+def get_spx_metrics():
+    try:
+        q = schwab_client.fetch_live_quote("$SPX")
+        if q:
+            pts = q['netChange']
+            pct = (pts / q['openPrice']) * 100
+            arrow = "↑" if pts >= 0 else "↓"
+            return (
+                q['lastPrice'], q['openPrice'], q['closePrice'],
+                f"{arrow} {abs(pts):.2f} pts ({abs(pct):.2f}%)"
+            )
+    except Exception:
+        pass
+    return 6850.00, 6860.00, 6800.00, "0 pts (0%)"
+
+
+@cache.memoize(timeout=60)
+def get_spx_history_intraday(period="1d"):
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - (86400 * 1000 * 10)
+    data = schwab_client.fetch_price_history(
+        symbol="$SPX", period_type="day", freq_type="minute", freq=5,
+        start_date=start_ms, end_date=now_ms,
+    )
+    if data and 'candles' in data:
+        df = pd.DataFrame(data['candles'])
+        if df.empty:
+            return df
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+        df['datetime'] = df['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/New_York').dt.tz_localize(None)
+        unique_dates = sorted(df['datetime'].dt.date.unique())
+        day_map = {"1d": -1, "3d": -3, "5d": -5}
+        target_dates = unique_dates[day_map.get(period, -1):]
+        df = df[df['datetime'].dt.date.isin(target_dates)]
+        df.set_index('datetime', inplace=True)
+        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+        return df
+    return pd.DataFrame()
+
+
+@cache.memoize(timeout=3600)
+def get_spx_history_historical():
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - (86400 * 1000 * 365)
+    data = schwab_client.fetch_price_history(
+        symbol="$SPX", period_type="year", freq_type="daily", freq=1,
+        start_date=start_ms, end_date=now_ms,
+    )
+    if data and 'candles' in data:
+        df = pd.DataFrame(data['candles'])
+        if df.empty:
+            return df
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+        df['datetime'] = (
+            df['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+            .dt.tz_localize(None).dt.normalize()
+        )
+        df.set_index('datetime', inplace=True)
+        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+        return df
+    return pd.DataFrame()
+
+
+@cache.memoize(timeout=60)
+def get_spx_puts():
+    try:
+        chain = schwab_client.fetch_options_chain("$SPX")
+        if not chain or 'putExpDateMap' not in chain or not chain['putExpDateMap']:
+            return pd.DataFrame()
+        exp = sorted(chain['putExpDateMap'].keys())[0]
+        puts = chain['putExpDateMap'][exp]
+        rows = []
+        for strike, data in puts.items():
+            opt = data[0]
+            rows.append({
+                'strike': float(strike),
+                'lastPrice': opt['last'] if opt['last'] > 0 else opt['mark'],
+                'bid': opt['bid'], 'ask': opt['ask'],
+                'delta': opt.get('delta', 0),
+            })
+        df = pd.DataFrame(rows)
+        return df.sort_values('strike', ascending=False).reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+# ── Header helper ────────────────────────────────────────────────────────────
+
+@cache.memoize(timeout=300)
+def _get_market_hours():
+    return schwab_client.fetch_market_hours()
+
+
+def _build_header_ctx():
+    import pytz
+    eastern = pytz.timezone('America/New_York')
+    now = datetime.datetime.now(eastern)
+    date_str = now.strftime("%A %B %-d, %Y")
+    parts = date_str.split(' ')
+    time_str = now.strftime("%H:%M")
+    try:
+        mi = _get_market_hours()
+    except Exception:
+        mi = None
+    if mi and mi.get('start') and mi.get('end'):
+        mkt_start, mkt_end = mi['start'], mi['end']
+        if now < mkt_start:
+            diff = mkt_start - now
+            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
+            status = f"{h}h {m}m until open"
+        elif now <= mkt_end:
+            diff = mkt_end - now
+            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
+            status = f"{h}h {m}m until close"
+        else:
+            status = "(Market Closed)"
+    elif mi:
+        status = "(Market Closed)"
+    else:
+        status = ""
+    return {
+        "date_bold": parts[0],
+        "date_rest": " ".join(parts[1:]),
+        "time": time_str,
+        "status": status,
+    }
+
+
+# ── Main page ────────────────────────────────────────────────────────────────
+
+@trading_bp.route('/')
+def trading():
+    store = _get_store()
+    return render_template(
+        'trading.html',
+        active_page='trading',
+        header=_build_header_ctx(),
+        store=store,
+    )
+
+
+# ── HTMX partials ────────────────────────────────────────────────────────────
+
+@trading_bp.route('/api/trading/metrics')
+def api_metrics():
+    spx_last, spx_open, spx_prior, _ = get_spx_metrics()
+    try:
+        vix_q   = schwab_client.fetch_live_quote("$VIX")
+        vix9d_q = schwab_client.fetch_live_quote("$VIX9D")
+        vix_last   = vix_q['lastPrice']   if vix_q   else 0.0
+        vix9d_last = vix9d_q['lastPrice'] if vix9d_q else 0.0
+    except Exception:
+        vix_last = vix9d_last = 0.0
+
+    def _pill(label, pts, pct):
+        bg   = "#6DF08C" if pts >= 0 else "#FF4646"
+        text = "#000" if pts >= 0 else "#FFF"
+        arr  = "↑" if pts >= 0 else "↓"
+        return f'''<div>
+          <p style="font-size:11px;color:#888;margin:0 0 2px">{label}</p>
+          <div style="background:{bg};color:{text};padding:4px 8px;border-radius:8px;
+                      display:inline-block;font-size:12px;">
+            {arr} {abs(pts):.2f} pts ({abs(pct):.2f}%)
+          </div>
+        </div>'''
+
+    gap_pts = spx_open - spx_prior
+    gap_pct = (gap_pts / spx_prior * 100) if spx_prior else 0
+    pts_ch  = spx_last - spx_open
+    pct_ch  = (pts_ch / spx_open * 100) if spx_open else 0
+    pr_pts  = spx_last - spx_prior
+    pr_pct  = (pr_pts / spx_prior * 100) if spx_prior else 0
+
+    store = _get_store()
+    bp    = store["saved_bp"]
+    sw    = store["saved_spread"]
+    contracts = store["saved_contracts"]
+    target    = store["saved_target"]
+
+    return render_template('partials/metrics.html',
+        spx_prior=spx_prior, spx_open=spx_open, spx_last=spx_last,
+        vix_last=vix_last, vix9d_last=vix9d_last,
+        gap_pts=gap_pts, gap_pct=gap_pct,
+        pts_ch=pts_ch, pct_ch=pct_ch,
+        pr_pts=pr_pts, pr_pct=pr_pct,
+        bp=bp, sw=sw, contracts=contracts, target=target,
+    )
+
+
+@trading_bp.route('/api/trading/spreads')
+def api_spreads():
+    store = _get_store()
+    bp        = _fnum(request.args.get('bp'),        store["saved_bp"])
+    sw        = _fnum(request.args.get('sw'),        store["saved_spread"])
+    contracts = _fnum(request.args.get('contracts'), store["saved_contracts"])
+    target    = _fnum(request.args.get('target'),    store["saved_target"])
+
+    spx_last, spx_open, _, _ = get_spx_metrics()
+    live_puts_df = get_spx_puts()
+
+    spreads_list, seen_strikes = [], set()
+    if not live_puts_df.empty:
+        for pct in [x / 10.0 for x in range(5, 81)]:
+            target_price = spx_last * (1 - pct / 100)
+            ci = (live_puts_df['strike'] - target_price).abs().idxmin()
+            short = live_puts_df.loc[ci]
+            ss = short['strike']
+            if ss in seen_strikes:
+                continue
+            seen_strikes.add(ss)
+            ls = ss - sw
+            long_match = live_puts_df[live_puts_df['strike'] == ls]
+            if not long_match.empty:
+                lp = long_match.iloc[0]
+                sp = short['lastPrice'] - lp['lastPrice']
+                if sp > 0:
+                    pts_out = abs(ss - spx_last)
+                    pct_out = (pts_out / spx_last) * 100
+                    spreads_list.append({
+                        "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
+                        "Strike": int(ss), "Leg": int(ls),
+                        "Short PX": round(short['lastPrice'], 2),
+                        "Long PX": round(lp['lastPrice'], 2),
+                        "Spread": round(sp, 2),
+                        "Premiums": round(sp * contracts * 100, 0),
+                    })
+
+    return render_template('partials/spreads.html',
+        spreads=spreads_list, target=target)
+
+
+@trading_bp.route('/api/trading/select-spread', methods=['POST'])
+def api_select_spread():
+    store = _get_store()
+    short = request.form.get('short', type=float)
+    long_ = request.form.get('long', type=float)
+    spread_px = request.form.get('spread_px', type=float)
+    if short is not None:
+        store['selected_short'] = short
+        store['selected_long'] = long_
+        store['selected_spread_px'] = spread_px or 0.0
+        store['saved_entry'] = spread_px or 0.0
+        store['saved_close'] = 0.05
+        _save_store(store)
+    return ('', 204)
+
+
+@trading_bp.route('/api/trading/trade-stats')
+def api_trade_stats():
+    store = _get_store()
+    entry     = _fnum(request.args.get('entry'),     store["saved_entry"])
+    close     = _fnum(request.args.get('close'),     store["saved_close"])
+    contracts = _fnum(request.args.get('contracts'), store["saved_contracts"])
+    pl = (entry - close) * contracts * 100
+    pl_str = f"+${pl:,.0f}" if pl >= 0 else f"-${abs(pl):,.0f}"
+    return render_template('partials/trade_stats.html', pl=pl_str)
+
+
+@trading_bp.route('/api/trading/prob')
+def api_prob():
+    store = _get_store()
+    selected_short = _fnum(request.args.get('short'), store.get("selected_short"))
+    selected_long  = _fnum(request.args.get('long'),  store.get("selected_long"))
+    live_puts_df = get_spx_puts()
+
+    short_prob = long_prob = "—"
+    if selected_short and not live_puts_df.empty and 'delta' in live_puts_df.columns:
+        m = live_puts_df[live_puts_df['strike'] == float(selected_short)]
+        if not m.empty:
+            short_prob = f"{(1 - abs(m.iloc[0]['delta'])) * 100:.1f}%"
+    if selected_long and not live_puts_df.empty and 'delta' in live_puts_df.columns:
+        m = live_puts_df[live_puts_df['strike'] == float(selected_long)]
+        if not m.empty:
+            long_prob = f"{(1 - abs(m.iloc[0]['delta'])) * 100:.1f}%"
+
+    strike_val = str(int(selected_short)) if selected_short else "—"
+    leg_val    = str(int(selected_long))  if selected_long  else "—"
+    return render_template('partials/prob.html',
+        strike=strike_val, short_prob=short_prob,
+        leg=leg_val, long_prob=long_prob)
+
+
+@trading_bp.route('/api/trading/day-chart')
+def api_day_chart():
+    period_label = request.args.get('day_period', '1 Day')
+    day_map = {"1 Day": "1d", "3 Days": "3d", "5 Days": "5d"}
+    df = get_spx_history_intraday(period=day_map.get(period_label, "1d"))
+    spx_last, spx_open, _, _ = get_spx_metrics()
+    is_down = (spx_last - spx_open) < 0
+    color = "#FF3D54" if is_down else "#11F185"
+    halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
+
+    store = _get_store()
+    selected_short = store.get("selected_short")
+    selected_long  = store.get("selected_long")
+
+    if df.empty:
+        fig = go.Figure()
+    else:
+        fig = create_spx_chart(
+            period_label, df['Close'], df.index, color, halo,
+            selected_short=selected_short, selected_long=selected_long,
+        )
+    return _chart_html('day-chart', fig)
+
+
+@trading_bp.route('/api/trading/month-chart')
+def api_month_chart():
+    period_label = request.args.get('month_period', '6 Months')
+    show_events  = bool(request.args.get('show_events'))
+    show_line    = bool(request.args.get('show_line'))
+
+    month_params = {"12 Months": "12mo", "8 Months": "8mo", "6 Months": "6mo",
+                    "3 Months": "3mo", "1 Month": "1mo"}
+    days_map = {"1mo": 30, "3mo": 90, "6mo": 180, "8mo": 240, "12mo": 365}
+
+    df = get_spx_history_historical()
+    spx_last, spx_open, _, _ = get_spx_metrics()
+
+    if df.empty:
+        return _chart_html('month-chart', go.Figure())
+
+    now_ts = pd.Timestamp.now('America/New_York').tz_localize(None).normalize()
+    if now_ts not in df.index:
+        live_row = pd.DataFrame(
+            {'Open': spx_last, 'High': spx_last, 'Low': spx_last, 'Close': spx_last},
+            index=[now_ts]
+        )
+        df = pd.concat([df, live_row])
+    else:
+        df.loc[now_ts, 'Close'] = spx_last
+
+    is_down = (spx_last - spx_open) < 0
+    color = "#FF3D54" if is_down else "#11F185"
+    halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
+
+    period    = month_params.get(period_label, "6mo")
+    view_days = days_map[period]
+    view_start = now_ts - pd.Timedelta(days=view_days)
+
+    events = None
+    if show_events:
+        lookahead = df.index.max() + pd.DateOffset(months=1)
+        events = get_financial_events(df.index.min(), lookahead)
+
+    candle_data = None if show_line else df
+    store = _get_store()
+    selected_short = store.get("selected_short")
+    selected_long  = store.get("selected_long")
+
+    fig = create_spx_chart(
+        period_label, df['Close'], df.index, color, halo,
+        events=events, chart_height=500, view_range=view_start,
+        ohlc_df=candle_data,
+        selected_short=selected_short, selected_long=selected_long,
+    )
+    return _chart_html('month-chart', fig)
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _fnum(val, default=0):
+    try:
+        return float(val) if val is not None else float(default)
+    except (ValueError, TypeError):
+        return float(default)
+
+
+def _chart_html(div_id: str, fig: go.Figure) -> str:
+    import json as _json
+    fig_json = fig.to_json()
+    return (
+        f'<div id="{div_id}" data-plotly=\'{fig_json}\' style="width:100%;height:100%"></div>'
+        f'<script>Plotly.react("{div_id}", '
+        f'JSON.parse(document.getElementById("{div_id}").dataset.plotly).data, '
+        f'JSON.parse(document.getElementById("{div_id}").dataset.plotly).layout, '
+        f'{{responsive:true,displayModeBar:false}});</script>'
+    )

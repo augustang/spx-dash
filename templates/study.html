@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Study — SPX{% endblock %}
+
+{% block content %}
+<div style="max-width:1400px;margin:0 auto">
+
+  <!-- 1. Long-term chart -->
+  <div class="section-label">Long-term chart</div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="chart-controls mb-2">
+        <div class="pill-group" id="range-radio">
+          {% for opt in ['1Y', '2Y', '5Y', '10Y', 'Max'] %}
+          <label class="pill-label {% if opt == '1Y' %}active{% endif %}">
+            <input type="radio" name="range" value="{{ opt }}"
+                   {% if opt == '1Y' %}checked{% endif %}
+                   hx-get="/api/study/long-chart"
+                   hx-trigger="change"
+                   hx-include="[name='range'], [name='show_events'], [name='show_line']"
+                   hx-target="#long-chart-container"
+                   style="display:none" />
+            {{ opt }}
+          </label>
+          {% endfor %}
+        </div>
+        <label class="pill-label">
+          <input type="checkbox" name="show_events" value="1"
+                 hx-get="/api/study/long-chart"
+                 hx-trigger="change"
+                 hx-include="[name='range'], [name='show_events'], [name='show_line']"
+                 hx-target="#long-chart-container" />
+          Events
+        </label>
+        <label class="pill-label">
+          <input type="checkbox" name="show_line" value="1"
+                 hx-get="/api/study/long-chart"
+                 hx-trigger="change"
+                 hx-include="[name='range'], [name='show_events'], [name='show_line']"
+                 hx-target="#long-chart-container" />
+          Line
+        </label>
+      </div>
+      <div id="long-chart-container"
+           hx-get="/api/study/long-chart?range=1Y"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder" style="height:680px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Intraday explorer -->
+  <div class="section-label">Intraday explorer</div>
+  <div class="row-2col-study mb-4">
+    <div class="card">
+      <div class="card-body">
+        <input type="date" name="date" id="intraday-date"
+               value="{{ yesterday }}"
+               min="{{ min_date }}"
+               max="{{ today }}"
+               style="font-size:13px;border:1px solid #E0E0E0;border-radius:6px;
+                      padding:5px 10px;background:white;font-family:inherit;
+                      color:#1A1A1A;outline:none;"
+               hx-get="/api/study/intraday"
+               hx-trigger="change"
+               hx-include="[name='date']"
+               hx-target="#intraday-content"
+               hx-swap="innerHTML" />
+        <div id="intraday-content"
+             hx-get="/api/study/intraday?date={{ yesterday }}"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+          <div class="loading-placeholder" style="height:300px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Event comparison -->
+  <div class="section-label">Event comparison</div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div id="cmp-section"
+           hx-get="/api/study/cmp"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder" style="height:100px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Conditional comparison -->
+  <div class="section-label">Conditional comparison</div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div id="cc-section"
+           hx-get="/api/study/cc"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder" style="height:100px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Event impact -->
+  <div class="section-label">Event impact</div>
+  <div class="card mb-4">
+    <div class="card-body"
+         id="event-impact"
+         hx-get="/api/study/event-impact"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="loading-placeholder" style="height:80px"></div>
+    </div>
+  </div>
+
+  <!-- 6. Key dates -->
+  <div class="section-label">Key dates</div>
+  <div class="card mb-4">
+    <div class="card-body"
+         id="key-dates"
+         hx-get="/api/study/key-dates"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="loading-placeholder" style="height:80px"></div>
+    </div>
+  </div>
+
+  <!-- 7. Notable events -->
+  <div class="section-label">Notable events</div>
+  <div class="card mb-4">
+    <div class="card-body"
+         id="notable-events"
+         hx-get="/api/study/notable-events"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="loading-placeholder" style="height:80px"></div>
+    </div>
+  </div>
+
+  <!-- 8. Intraday moves ±1.5% -->
+  <div class="section-label">Intraday moves ±1.5%</div>
+  <div class="card mb-4">
+    <div class="card-body"
+         id="big-moves"
+         hx-get="/api/study/big-moves"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="loading-placeholder" style="height:80px"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('htmx:afterSwap', function(e) {
+  e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
+    const fig = JSON.parse(el.dataset.plotly);
+    Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
+  });
+});
+document.addEventListener('change', function(e) {
+  if (e.target.type === 'radio') {
+    const group = e.target.closest('.pill-group');
+    if (!group) return;
+    group.querySelectorAll('.pill-label').forEach(l => l.classList.remove('active'));
+    e.target.closest('.pill-label').classList.add('active');
+  }
+});
+</script>
+{% endblock %}

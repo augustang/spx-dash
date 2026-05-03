@@ -1,0 +1,64 @@
+{% if error %}
+<p style="font-size:12px;color:#888;margin-top:16px">{{ error }}</p>
+{% else %}
+<div style="margin-top:16px">
+  <div class="row-2col mb-2">
+    <div>
+      <p class="metric-label">Open</p>
+      <p class="metric-value">{{ "{:,.2f}".format(stats.open) }}</p>
+    </div>
+    <div>
+      <p class="metric-label">Close</p>
+      <p class="metric-value">{{ "{:,.2f}".format(stats.close) }}</p>
+    </div>
+  </div>
+  <div class="row-2col mb-3">
+    <div>
+      <p class="metric-label">High</p>
+      <p class="metric-value">{{ "{:,.2f}".format(stats.high) }}</p>
+    </div>
+    <div>
+      <p class="metric-label">Low</p>
+      <p class="metric-value">{{ "{:,.2f}".format(stats.low) }}</p>
+    </div>
+  </div>
+
+  {% macro ch_pill(label, pts, pct) %}
+  {% set bg   = "#6DF08C" if pts >= 0 else "#FF4646" %}
+  {% set text = "#000"    if pts >= 0 else "#FFF" %}
+  {% set arr  = "↑"       if pts >= 0 else "↓" %}
+  <div>
+    <p style="font-size:12px;color:#000;margin-bottom:-10px">{{ label }}</p>
+    <div style="background:{{ bg }};color:{{ text }};padding:4px 8px;border-radius:8px;
+                display:inline-block;font-size:12px;margin-top:10px;">
+      {{ arr }} {{ "{:.2f}".format(pts|abs) }} ({{ "{:.2f}".format(pct|abs) }}%)
+    </div>
+  </div>
+  {% endmacro %}
+
+  {% macro gray_pill(label, val) %}
+  <div>
+    <p style="font-size:12px;color:#000;margin-bottom:-10px">{{ label }}</p>
+    <div style="background:#F1F2F6;padding:4px 8px;border-radius:8px;
+                display:inline-block;font-size:12px;margin-top:10px;">{{ val }}</div>
+  </div>
+  {% endmacro %}
+
+  <div class="row-2col mb-3">
+    {{ ch_pill("Open to close", stats.day_ch_pts, stats.day_ch_pct) }}
+    {% if stats.gap_pts is not none %}
+    {{ ch_pill("Overnight gap", stats.gap_pts, stats.gap_pct) }}
+    {% endif %}
+  </div>
+  <div class="row-2col mb-3">
+    {{ gray_pill("Open to low",
+        "{:.1f} pts ({:.2f}%)".format(stats.open_to_low_pts, stats.open_to_low_pct)) }}
+    {{ gray_pill("High to low",
+        "{:.1f} pts ({:.2f}%)".format(stats.high_to_low_pts, stats.high_to_low_pct)) }}
+  </div>
+  <div class="row-2col mb-3">
+    {{ gray_pill("Realized vol (1σ)", stats.vol) }}
+  </div>
+</div>
+{{ fig_html | safe }}
+{% endif %}

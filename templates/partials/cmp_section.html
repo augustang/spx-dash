@@ -1,0 +1,141 @@
+<!-- Event comparison section — entire section re-rendered on any change -->
+<div>
+  <!-- Add / Clear buttons -->
+  <div style="display:flex;gap:8px;margin-bottom:8px">
+    <button class="btn-outline"
+            hx-post="/api/study/cmp"
+            hx-vals='{"action":"add"}'
+            hx-target="#cmp-section"
+            hx-swap="innerHTML">＋  Add event</button>
+    <button class="btn-text"
+            hx-post="/api/study/cmp"
+            hx-vals='{"action":"clear"}'
+            hx-target="#cmp-section"
+            hx-swap="innerHTML">Clear all</button>
+  </div>
+
+  <!-- Event rows -->
+  {% for entry in store.entries %}
+  {% set i = loop.index0 %}
+  {% set color = cmp_colors[i % cmp_colors|length] %}
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:6px 0 4px" />
+  <div class="row-4col" style="align-items:flex-end;gap:12px;margin-bottom:4px">
+    <!-- Type -->
+    <div>
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">
+        <span style="width:8px;height:8px;border-radius:50%;background:{{ color }};display:inline-block"></span>
+        <span style="font-size:11px;color:#999">Event type</span>
+      </div>
+      <select style="font-size:12px;width:100%;background:#F1F2F6;border:none;border-radius:6px;
+                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+              hx-post="/api/study/cmp"
+              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"type"}'
+              hx-include="select"
+              hx-target="#cmp-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for t in entry_types %}
+        <option value="{{ t }}" {% if t == entry.type %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <!-- Offset or Date -->
+    <div>
+      {% if entry.type != "Specific date" %}
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Offset</p>
+      <select style="font-size:12px;width:100%;background:#F1F2F6;border:none;border-radius:6px;
+                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+              hx-post="/api/study/cmp"
+              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"offset"}'
+              hx-include="select"
+              hx-target="#cmp-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for opt in offset_opts %}
+        <option value="{{ opt }}" {% if opt == entry.offset %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Date</p>
+      <input type="date" value="{{ entry.date }}"
+             style="font-size:12px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;height:32px;font-family:inherit"
+             hx-post="/api/study/cmp"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"date"}'
+             hx-trigger="change"
+             hx-include="input"
+             hx-target="#cmp-section"
+             hx-swap="innerHTML"
+             name="value" />
+      {% endif %}
+    </div>
+    <!-- Enabled -->
+    <div>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox"
+               {% if entry.enabled %}checked{% endif %}
+               hx-post="/api/study/cmp"
+               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"enabled","value":"{% if entry.enabled %}false{% else %}true{% endif %}"}'
+               hx-trigger="change"
+               hx-target="#cmp-section"
+               hx-swap="innerHTML" />
+        On
+      </label>
+    </div>
+    <!-- Delete -->
+    <div>
+      <button class="btn-text"
+              hx-post="/api/study/cmp"
+              hx-vals='{"action":"delete","id":"{{ entry.id }}"}'
+              hx-target="#cmp-section"
+              hx-swap="innerHTML">✕</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Global filters (shown only when there are entries) -->
+  {% if store.ids %}
+  <div style="height:6px"></div>
+  <div class="row-2col">
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Time range</p>
+      <div class="pill-group">
+        {% for opt in range_opts %}
+        <label class="pill-label {% if opt == store.range %}active{% endif %}">
+          <input type="radio" name="cmp_range" value="{{ opt }}"
+                 {% if opt == store.range %}checked{% endif %}
+                 hx-post="/api/study/cmp"
+                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                 hx-trigger="change"
+                 hx-target="#cmp-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ opt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Overnight gap</p>
+      <div class="pill-group">
+        {% for opt in gap_opts %}
+        <label class="pill-label {% if opt == store.gap %}active{% endif %}">
+          <input type="radio" name="cmp_gap" value="{{ opt }}"
+                 {% if opt == store.gap %}checked{% endif %}
+                 hx-post="/api/study/cmp"
+                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
+                 hx-trigger="change"
+                 hx-target="#cmp-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ opt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Charts -->
+  {{ charts_html | safe }}
+</div>

@@ -1,0 +1,33 @@
+{% set ret_cols = ["Prior day O→C", "Event O→C", "Event O→L", "Next day O→C"] %}
+<div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Count</th>
+        {% for col in ret_cols %}<th>{{ col }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for _, row in impact_df.iterrows() %}
+      <tr>
+        <td>{{ row.Event }}</td>
+        <td>{{ row.Count }}</td>
+        {% for col in ret_cols %}
+        {% set val = row[col] %}
+        {% if val != val %}{# NaN #}
+        <td>—</td>
+        {% elif val >= 0 %}
+        <td style="color:#11F185;font-weight:600">+{{ "%.2f"|format(val) }}%</td>
+        {% else %}
+        <td style="color:#FF3D54;font-weight:600">{{ "%.2f"|format(val) }}%</td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p style="font-size:11px;color:#888;margin-top:6px">
+  Averaged open-to-close · Last {{ years }} years · {{ "{:,}".format(n_days) }} trading days · {{ n_events }} event occurrences
+</p>

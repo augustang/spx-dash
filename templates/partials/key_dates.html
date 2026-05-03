@@ -1,0 +1,43 @@
+{% macro pill(d) %}
+<input type="text" readonly value="{{ d.strftime('%m/%d/%Y') }}"
+       onclick="this.select()"
+       style="display:block;font-size:12px;color:#444;background:#F1F2F6;
+              border:none;outline:none;padding:3px 10px;border-radius:6px;
+              margin-bottom:4px;width:94px;cursor:default;font-family:inherit;" />
+{% endmacro %}
+
+<div style="padding:16px 0 4px 16px;width:fit-content">
+  {% for key, label in [("OPEX","OPEX (3rd Friday"),("VIX Exp","VIX Expiration"),("FOMC","FOMC Day")] %}
+  {% set dates_for_key = grouped.get(key, []) | sort(reverse=True) %}
+  {% if dates_for_key %}
+  <div style="margin-bottom:24px">
+    <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ label }}</p>
+    <div style="display:flex;flex-wrap:wrap;gap:24px">
+      {% set by_year = namespace(data={}) %}
+      {% for d in dates_for_key %}
+        {% set yr = d.year %}
+        {# group by year via nested display #}
+      {% endfor %}
+      {# Simplified: display all dates in a single row since Jinja lacks mutable dicts easily #}
+      {% for d in dates_for_key %}
+      {{ pill(d) }}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  <div style="margin-bottom:24px">
+    <div style="display:flex;flex-wrap:wrap;gap:24px">
+      {% for key, label in [("Thanksgiving","Thanksgiving"),("Xmas","Christmas"),("NYE","New Year's Eve")] %}
+      {% set dates_for_key = grouped.get(key, []) | sort(reverse=True) %}
+      {% if dates_for_key %}
+      <div style="min-width:140px">
+        <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ label }}</p>
+        {% for d in dates_for_key %}{{ pill(d) }}{% endfor %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>

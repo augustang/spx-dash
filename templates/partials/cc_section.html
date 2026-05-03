@@ -1,0 +1,217 @@
+<!-- Conditional comparison section -->
+<div>
+  <div style="display:flex;gap:8px;margin-bottom:8px">
+    <button class="btn-outline"
+            hx-post="/api/study/cc"
+            hx-vals='{"action":"add"}'
+            hx-target="#cc-section"
+            hx-swap="innerHTML">＋  Add condition</button>
+    <button class="btn-text"
+            hx-post="/api/study/cc"
+            hx-vals='{"action":"clear"}'
+            hx-target="#cc-section"
+            hx-swap="innerHTML">Clear all</button>
+  </div>
+
+  {% for entry in store.entries %}
+  {% set ct = entry.type %}
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:6px 0 4px" />
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:4px">
+    <!-- Condition type -->
+    <div style="min-width:180px">
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Condition type</p>
+      <select style="font-size:12px;width:100%;background:#F1F2F6;border:none;border-radius:6px;
+                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"type"}'
+              hx-include="select"
+              hx-target="#cc-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for t in cond_types %}
+        <option value="{{ t }}" {% if t == ct %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Type-specific params -->
+    {% if ct == "% from open at time" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">At time (ET)</p>
+      <select style="font-size:12px;background:#F1F2F6;border:none;border-radius:6px;
+                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"time"}'
+              hx-include="select"
+              hx-trigger="change"
+              hx-target="#cc-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for t in time_opts %}
+        <option value="{{ t }}" {% if t == entry.time %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Min %</p>
+      <input type="number" step="0.1" value="{{ entry.pct_min }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"pct_min"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Max %</p>
+      <input type="number" step="0.1" value="{{ entry.pct_max }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"pct_max"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+
+    {% elif ct == "Days from event" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Event</p>
+      <select style="font-size:12px;background:#F1F2F6;border:none;border-radius:6px;
+                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"event"}'
+              hx-include="select"
+              hx-trigger="change"
+              hx-target="#cc-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for e in event_opts %}
+        <option value="{{ e }}" {% if e == entry.event %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Min days</p>
+      <input type="number" step="1" value="{{ entry.days_min }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"days_min"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Max days</p>
+      <input type="number" step="1" value="{{ entry.days_max }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"days_max"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+
+    {% elif ct == "Day of week" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Select days</p>
+      <div style="display:flex;gap:4px">
+        {% for label in dow_labels %}
+        {% set i = loop.index0 %}
+        <label class="pill-label {% if i in entry.dow %}active{% endif %}">
+          <input type="checkbox"
+                 {% if i in entry.dow %}checked{% endif %}
+                 hx-post="/api/study/cc"
+                 hx-vals='{"action":"update","id":"{{ entry.id }}","field":"dow_toggle","value":"{{ i }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% elif ct == "Month" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Select months</p>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% for i in range(1, 13) %}
+        <label class="pill-label {% if i in entry.months %}active{% endif %}">
+          <input type="checkbox"
+                 {% if i in entry.months %}checked{% endif %}
+                 hx-post="/api/study/cc"
+                 hx-vals='{"action":"update","id":"{{ entry.id }}","field":"month_toggle","value":"{{ i }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ mon_labels[i-1] }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% else %}{# Overnight gap #}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Min gap %</p>
+      <input type="number" step="0.1" value="{{ entry.gap_min }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"gap_min"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:2px">Max gap %</p>
+      <input type="number" step="0.1" value="{{ entry.gap_max }}"
+             style="width:80px;background:#F1F2F6;border:none;border-radius:6px;
+                    padding:6px 10px;font-size:12px;font-family:inherit"
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"gap_max"}'
+             hx-include="input"
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML"
+             name="value" />
+    </div>
+    {% endif %}
+
+    <!-- Enabled + Delete -->
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox"
+             {% if entry.enabled %}checked{% endif %}
+             hx-post="/api/study/cc"
+             hx-vals='{"action":"update","id":"{{ entry.id }}","field":"enabled","value":"{% if entry.enabled %}false{% else %}true{% endif %}"}'
+             hx-trigger="change"
+             hx-target="#cc-section"
+             hx-swap="innerHTML" />
+      On
+    </label>
+    <button class="btn-text"
+            hx-post="/api/study/cc"
+            hx-vals='{"action":"delete","id":"{{ entry.id }}"}'
+            hx-target="#cc-section"
+            hx-swap="innerHTML">✕</button>
+  </div>
+  {% endfor %}
+
+  <!-- Results -->
+  {{ results_html | safe }}
+</div>

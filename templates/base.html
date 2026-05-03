@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}SPX Dashboard{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="spx-header">
+  <div class="spx-header-left">
+    <span class="header-date">{{ header.date_bold }} <span class="header-date-rest">{{ header.date_rest }}</span></span>
+    <span class="header-time">{{ header.time }}</span>
+    <span class="header-status">{{ header.status }}</span>
+  </div>
+  <nav class="spx-nav">
+    <a href="/" class="spx-nav-link {% if active_page == 'trading' %}active{% endif %}">
+      Trade
+      <div class="spx-nav-dot"></div>
+    </a>
+    <a href="/study" class="spx-nav-link {% if active_page == 'study' %}active{% endif %}">
+      Study
+      <div class="spx-nav-dot"></div>
+    </a>
+  </nav>
+</header>
+
+<!-- ── Page content ────────────────────────────────────────────────────── -->
+<main>
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

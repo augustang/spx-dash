@@ -1,0 +1,9 @@
+flask
+flask-caching
+gunicorn
+python-dotenv
+pandas
+plotly
+requests
+pytz
+numpy

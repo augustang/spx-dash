@@ -1,0 +1,61 @@
+{% macro pill(d) %}
+<input type="text" readonly value="{{ d.strftime('%m/%d/%Y') }}"
+       onclick="this.select()"
+       style="display:block;font-size:12px;color:#444;background:#F1F2F6;
+              border:none;outline:none;padding:3px 10px;border-radius:6px;
+              margin-bottom:4px;width:94px;cursor:default;font-family:inherit;" />
+{% endmacro %}
+
+{% macro pct_spans(oc, ol) %}
+{% if oc is not none %}
+{% set sign  = "+" if oc >= 0 else "" %}
+{% set color = "#11F185" if oc >= 0 else "#FF3D54" %}
+<span style="font-size:12px;color:{{ color }}">{{ sign }}{{ "%.1f"|format(oc) }}%</span>
+{% endif %}
+{% if ol is not none %}
+<span style="font-size:12px;color:#B71AFF">{{ "%.1f"|format(ol) }}%</span>
+{% endif %}
+{% endmacro %}
+
+<!-- Section legend -->
+<div style="display:flex;gap:28px;align-items:center;margin-bottom:28px">
+  {% for color, label in [("#11F185","Positive open to close"),("#FF3D54","Negative open to close"),("#B71AFF","Open to low")] %}
+  <span style="display:flex;align-items:center;gap:5px">
+    <span style="width:4px;height:4px;border-radius:50%;background:{{ color }};display:inline-block;flex-shrink:0"></span>
+    <span style="font-size:11px;color:#888">{{ label }}</span>
+  </span>
+  {% endfor %}
+</div>
+
+<div style="padding:4px 0 4px 16px;width:fit-content">
+  {% set by_year = {} %}
+  {% for d, label in notable_events %}
+    {% if d.year not in by_year %}{% set _ = by_year.update({d.year: []}) %}{% endif %}
+    {% set _ = by_year[d.year].append((d, label)) %}
+  {% endfor %}
+  <div style="display:flex;flex-wrap:wrap;gap:24px">
+    {% for yr in by_year.keys() | sort(reverse=True) %}
+    <div style="min-width:140px">
+      <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
+      {% for d, lbl in by_year[yr] | sort %}
+      <div style="margin-bottom:22px">
+        <span style="font-size:12px;color:#444;display:block;margin-bottom:0px">{{ lbl }}</span>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          {% set oc = oc_pct.get(d) %}
+          {% set ol = ol_pct.get(d) %}
+          {% if oc is not none %}
+          {% set sign = "+" if oc >= 0 else "" %}
+          {% set col  = "#11F185" if oc >= 0 else "#FF3D54" %}
+          <span style="font-size:12px;color:{{ col }}">{{ sign }}{{ "%.1f"|format(oc) }}%</span>
+          {% endif %}
+          {% if ol is not none %}
+          <span style="font-size:12px;color:#B71AFF">{{ "%.1f"|format(ol) }}%</span>
+          {% endif %}
+        </div>
+        {{ pill(d) }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
