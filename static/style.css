@@ -63,6 +63,13 @@ main {
 .row-4col        { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
 .row-2col-study  { display: grid; grid-template-columns: 5fr 7fr;         gap: 24px; }
 
+
+@media (min-width: 1386px) {
+    .col-right { display: flex; flex-direction: column; }
+    .col-right > .section-label { align-self: flex-start; }
+    .chart-col-spacer { flex: 1; }
+}
+
 @media (max-width: 1385px) {
     .page-grid,
     .row-2col,
@@ -103,12 +110,12 @@ main {
 }
 
 .spx-header-left  { display: flex; align-items: center; gap: 15px; }
-.header-date-group { display: inline-flex; align-items: center; gap: 8px; }
+.header-date-group { display: inline-flex; align-items: center; gap: 8px; opacity: 0.4; }
 .header-time-group { display: inline-flex; align-items: center; gap: 8px; }
-.header-date      { font-size: 16px; font-weight: 500; color: var(--text); }
-.header-date-rest { font-size: 16px; font-weight: 400; color: var(--text-subtle, #808080); }
+.header-date      { font-size: 16px; font-weight: 400; color: var(--text); }
+.header-date-rest { font-size: 16px; font-weight: 400; color: var(--text); }
 .header-time      { color: var(--purple); font-size: 16px; }
-.header-status    { color: var(--purple-light); font-size: 16px; opacity: 0.7; }
+.header-status    { color: var(--purple); font-size: 16px; opacity: 0.4; }
 
 .spx-nav {
     display: flex;
@@ -141,7 +148,7 @@ main {
     border: none;
 }
 .card-body { padding: 24px; }
-.chart-card .card-body { padding: 16px 24px 24px; }
+.chart-card .card-body { padding: 24px 24px 24px; }
 
 .section-label {
     background: rgba(0,0,0,0.05);
