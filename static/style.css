@@ -49,7 +49,7 @@ input[type="number"]::-webkit-inner-spin-button {
 
 /* ── Layout ───────────────────────────────────────────────────────────────── */
 main {
-    padding: 24px 40px;
+    padding: 24px 40px 64px;
 }
 
 .page-grid {
@@ -62,6 +62,7 @@ main {
 .row-3col        { display: grid; grid-template-columns: 1fr 1fr 1fr;     gap: 16px; }
 .row-4col        { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
 .row-2col-study  { display: grid; grid-template-columns: 5fr 7fr;         gap: 24px; }
+.row-intraday    { display: grid; grid-template-columns: 1fr 2fr;         gap: 24px; }
 
 
 @media (min-width: 1386px) {
@@ -75,7 +76,8 @@ main {
     .row-2col,
     .row-3col,
     .row-4col,
-    .row-2col-study {
+    .row-2col-study,
+    .row-intraday {
         grid-template-columns: 1fr;
     }
     .metrics-wrap .row-3col {
@@ -105,8 +107,7 @@ main {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 0 40px 20px;
-    padding-top: 24px;
+    padding: 40px 40px 20px;
 }
 
 .spx-header-left  { display: flex; align-items: center; gap: 15px; }
@@ -166,16 +167,16 @@ main {
     font-size: 20px;
     font-weight: 400;
     line-height: 1.2;
-    letter-spacing: -0.06em;
+    letter-spacing: -0.02em;
     color: var(--text);
     margin: 0;
 }
 
 .metric-label {
     font-size: 11px;
-    color: var(--muted);
+    color: var(--text);
     font-weight: 400;
-    margin: 0 0 2px;
+    margin: 0 0 4px;
 }
 
 .metric-sub { font-size: 12px; color: #555; }

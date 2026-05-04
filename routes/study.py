@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 import datetime
+
+
+def _most_recent_trading_day() -> datetime.date:
+    """Return the most recent Mon–Fri (walks back through weekends)."""
+    d = datetime.date.today()
+    while d.weekday() >= 5:  # 5 = Sat, 6 = Sun
+        d -= datetime.timedelta(days=1)
+    return d
 import html
 import json
 import os
@@ -354,7 +362,7 @@ def study():
         active_page='study',
         header=_build_header_ctx(),
         today=today.isoformat(),
-        yesterday=(today - datetime.timedelta(days=1)).isoformat(),
+        yesterday=_most_recent_trading_day().isoformat(),
         min_date=min_date.isoformat(),
     )
 
@@ -398,11 +406,14 @@ def api_intraday():
         return ''
     selected_date = datetime.date.fromisoformat(date_str)
     df_day = get_spx_5min_for_date(selected_date)
+    today_iso    = datetime.date.today().isoformat()
+    min_date_iso = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     if df_day.empty:
         return render_template('partials/intraday.html',
             error=f"No data for {selected_date.strftime('%b %-d, %Y')}. "
                   "Try a US trading day within the last ~9 months.",
-            fig_html='', stats=None)
+            fig_html='', stats=None,
+            date_str=date_str, today=today_iso, min_date=min_date_iso)
 
     day_open  = float(df_day['Open'].iloc[0])
     day_high  = float(df_day['High'].max())
@@ -441,9 +452,15 @@ def api_intraday():
         chart_height=420, hover_xfmt="%H:%M",
     )
 
+    today_iso    = datetime.date.today().isoformat()
+    min_date_iso = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
+
     return render_template('partials/intraday.html',
         error=None,
         fig_html=_chart_html('study-intraday-chart', fig),
+        date_str=date_str,
+        today=today_iso,
+        min_date=min_date_iso,
         stats={
             "open": day_open, "close": day_close,
             "high": day_high, "low": day_low,

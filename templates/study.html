@@ -2,7 +2,7 @@
 {% block title %}Study — SPX{% endblock %}
 
 {% block content %}
-<div style="max-width:1400px;margin:0 auto">
+<div>
 
   <!-- 1. Long-term chart -->
   <div class="section-label">Long-term chart</div>
@@ -55,29 +55,11 @@
 
   <!-- 2. Intraday explorer -->
   <div class="section-label">Intraday explorer</div>
-  <div class="row-2col-study mb-4">
-    <div class="card">
-      <div class="card-body">
-        <input type="date" name="date" id="intraday-date"
-               value="{{ yesterday }}"
-               min="{{ min_date }}"
-               max="{{ today }}"
-               style="font-size:13px;border:1px solid #E0E0E0;border-radius:6px;
-                      padding:5px 10px;background:white;font-family:inherit;
-                      color:#1A1A1A;outline:none;"
-               hx-get="/api/study/intraday"
-               hx-trigger="change"
-               hx-include="[name='date']"
-               hx-target="#intraday-content"
-               hx-swap="innerHTML" />
-        <div id="intraday-content"
-             hx-get="/api/study/intraday?date={{ yesterday }}"
-             hx-trigger="load"
-             hx-swap="innerHTML">
-          <div class="loading-placeholder" style="height:300px">Loading…</div>
-        </div>
-      </div>
-    </div>
+  <div id="intraday-content" class="mb-4"
+       hx-get="/api/study/intraday?date={{ yesterday }}"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="loading-placeholder" style="height:300px">Loading…</div>
   </div>
 
   <!-- 3. Event comparison -->
