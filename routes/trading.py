@@ -495,7 +495,12 @@ def _chart_html(div_id: str, fig: go.Figure, selected_short=None, selected_long=
         f' data-short="{int(selected_short)}" data-long="{int(selected_long)}"'
         if selected_short is not None else ''
     )
+    # The wrapper holds position:relative so pills can be absolutely positioned
+    # over the chart without being children of the Plotly div itself (which
+    # would interfere with Plotly's internal hover/event overlay).
     return (
+        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:100%">'
         f'<div id="{div_id}" data-plotly="{fig_json}"{strike_attrs} '
-        f'style="position:relative;width:100%;height:100%"></div>'
+        f'style="width:100%;height:100%"></div>'
+        f'</div>'
     )

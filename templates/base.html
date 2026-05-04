@@ -50,7 +50,10 @@
 // This is more reliable than Plotly layout.annotations, which disappear
 // when uirevision changes on spread selection.
 function positionStrikePills(el) {
-  el.querySelectorAll('.strike-pill').forEach(function(p) { p.remove(); });
+  // Pills go into the wrapper (el.parentElement) not the Plotly div itself,
+  // so they don't sit inside Plotly's DOM and can't block its hover overlay.
+  var wrap = el.parentElement;
+  wrap.querySelectorAll('.strike-pill').forEach(function(p) { p.remove(); });
   var short = el.dataset.short, long_ = el.dataset.long;
   if (!short || !el._fullLayout) return;
 
@@ -101,7 +104,7 @@ function positionStrikePills(el) {
         'letter-spacing:-0.02em',
       'z-index:10',
     ].join(';');
-    el.appendChild(pill);
+      wrap.appendChild(pill);
   });
 }
 
