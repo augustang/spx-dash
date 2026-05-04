@@ -1,12 +1,14 @@
 """Trading page — Flask Blueprint."""
 from __future__ import annotations
 
+import html
+import math
 import time
 import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
-from flask import Blueprint, render_template, request, session, jsonify
+from flask import Blueprint, render_template, request, session, jsonify, make_response
 
 import schwab_client
 from shared.cache import cache
@@ -42,12 +44,20 @@ def _save_store(store: dict) -> None:
 def get_spx_metrics():
     try:
         q = schwab_client.fetch_live_quote("$SPX")
-        if q:
-            pts = q['netChange']
-            pct = (pts / q['openPrice']) * 100
+        if q and q.get('lastPrice'):
+            # Outside market hours, Schwab returns openPrice=0 (no print yet).
+            # The naive (pts / openPrice) below would ZeroDivisionError into
+            # the hardcoded fallback, which is what was making the spreads
+            # loop target strikes way out of range (e.g. ~6815 vs a chain
+            # spanning 7010-7460), producing zero usable rows. Substitute
+            # closePrice when openPrice is 0 so downstream gap/change math
+            # all collapses to 0 cleanly instead of corrupting spx_last.
+            spx_open = q['openPrice'] or q['closePrice']
+            pts = q['netChange'] or 0.0
+            pct = (pts / spx_open * 100) if spx_open else 0.0
             arrow = "↑" if pts >= 0 else "↓"
             return (
-                q['lastPrice'], q['openPrice'], q['closePrice'],
+                q['lastPrice'], spx_open, q['closePrice'],
                 f"{arrow} {abs(pts):.2f} pts ({abs(pct):.2f}%)"
             )
     except Exception:
@@ -212,29 +222,58 @@ def api_metrics():
     pr_pts  = spx_last - spx_prior
     pr_pct  = (pr_pts / spx_prior * 100) if spx_prior else 0
 
-    store = _get_store()
-    bp    = store["saved_bp"]
-    sw    = store["saved_spread"]
-    contracts = store["saved_contracts"]
-    target    = store["saved_target"]
-
     return render_template('partials/metrics.html',
         spx_prior=spx_prior, spx_open=spx_open, spx_last=spx_last,
         vix_last=vix_last, vix9d_last=vix9d_last,
         gap_pts=gap_pts, gap_pct=gap_pct,
         pts_ch=pts_ch, pct_ch=pct_ch,
         pr_pts=pr_pts, pr_pct=pr_pct,
-        bp=bp, sw=sw, contracts=contracts, target=target,
     )
+
+
+@trading_bp.route('/api/trading/inputs')
+def api_inputs_get():
+    """Initial render of the inputs panel from session state."""
+    store = _get_store()
+    return render_template('partials/inputs.html', **store)
+
+
+@trading_bp.route('/api/trading/save-inputs', methods=['POST'])
+def api_save_inputs():
+    """Single source of truth for input changes. Persists to session,
+    recalculates derived values, and triggers the spreads panel to refresh."""
+    store = _get_store()
+    bp        = _fnum(request.form.get('bp'),        store['saved_bp'])
+    sw        = _fnum(request.form.get('sw'),        store['saved_spread'])
+    contracts = _fnum(request.form.get('contracts'), store['saved_contracts'])
+    target    = _fnum(request.form.get('target'),    store['saved_target'])
+    entry     = _fnum(request.form.get('entry'),     store['saved_entry'])
+    close     = _fnum(request.form.get('close'),     store['saved_close'])
+    triggered = request.form.get('_triggered', '')
+
+    if triggered in ('bp', 'sw') and bp and sw:
+        contracts = int(bp / (sw * 100))
+        target    = int(contracts * 0.10 * 100)
+
+    store.update(
+        saved_bp=bp, saved_spread=int(sw),
+        saved_contracts=int(contracts), saved_target=int(target),
+        saved_entry=entry, saved_close=close,
+    )
+    _save_store(store)
+
+    resp = make_response(render_template('partials/inputs.html', **store))
+    resp.headers['HX-Trigger'] = 'inputs-saved'
+    return resp
 
 
 @trading_bp.route('/api/trading/spreads')
 def api_spreads():
     store = _get_store()
-    bp        = _fnum(request.args.get('bp'),        store["saved_bp"])
-    sw        = _fnum(request.args.get('sw'),        store["saved_spread"])
-    contracts = _fnum(request.args.get('contracts'), store["saved_contracts"])
-    target    = _fnum(request.args.get('target'),    store["saved_target"])
+    bp        = store["saved_bp"]
+    sw        = store["saved_spread"]
+    contracts = store["saved_contracts"]
+    target    = store["saved_target"]
 
     spx_last, spx_open, _, _ = get_spx_metrics()
     live_puts_df = get_spx_puts()
@@ -266,8 +305,33 @@ def api_spreads():
                         "Premiums": round(sp * contracts * 100, 0),
                     })
 
+    selected_short = store.get('selected_short')
+    if selected_short and not live_puts_df.empty:
+        ss = float(selected_short)
+        if not any(r['Strike'] == int(ss) for r in spreads_list):
+            sm = live_puts_df[live_puts_df['strike'] == ss]
+            ls = ss - sw
+            lm = live_puts_df[live_puts_df['strike'] == ls]
+            if not sm.empty and not lm.empty:
+                short = sm.iloc[0]
+                lp = lm.iloc[0]
+                sp = short['lastPrice'] - lp['lastPrice']
+                if sp > 0:
+                    pts_out = abs(ss - spx_last)
+                    pct_out = (pts_out / spx_last) * 100
+                    spreads_list.append({
+                        "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
+                        "Strike": int(ss), "Leg": int(ls),
+                        "Short PX": round(short['lastPrice'], 2),
+                        "Long PX": round(lp['lastPrice'], 2),
+                        "Spread": round(sp, 2),
+                        "Premiums": round(sp * contracts * 100, 0),
+                    })
+                    spreads_list.sort(key=lambda r: r['Pts'])
+
     return render_template('partials/spreads.html',
-        spreads=spreads_list, target=target)
+        spreads=spreads_list, target=target,
+        selected_short=selected_short)
 
 
 @trading_bp.route('/api/trading/select-spread', methods=['POST'])
@@ -277,31 +341,46 @@ def api_select_spread():
     long_ = request.form.get('long', type=float)
     spread_px = request.form.get('spread_px', type=float)
     if short is not None:
-        store['selected_short'] = short
-        store['selected_long'] = long_
-        store['selected_spread_px'] = spread_px or 0.0
-        store['saved_entry'] = spread_px or 0.0
-        store['saved_close'] = 0.05
+        if store.get('selected_short') == short:
+            store['selected_short'] = None
+            store['selected_long'] = None
+            store['selected_spread_px'] = 0.0
+        else:
+            store['selected_short'] = short
+            store['selected_long'] = long_
+            store['selected_spread_px'] = spread_px or 0.0
+            store['saved_entry'] = math.floor((spread_px or 0.0) * 20) / 20
+            store['saved_close'] = 0.05
         _save_store(store)
-    return ('', 204)
+    resp = make_response('', 204)
+    resp.headers['HX-Trigger'] = 'spread-selected'
+    return resp
 
 
-@trading_bp.route('/api/trading/trade-stats')
-def api_trade_stats():
+@trading_bp.route('/api/trading/trade', methods=['GET', 'POST'])
+def api_trade():
+    """Renders the full trade card (Entry PX / Current PX / Close / P/L).
+    Saves entry/close edits to session on POST."""
     store = _get_store()
-    entry     = _fnum(request.args.get('entry'),     store["saved_entry"])
-    close     = _fnum(request.args.get('close'),     store["saved_close"])
-    contracts = _fnum(request.args.get('contracts'), store["saved_contracts"])
+    if request.method == 'POST':
+        entry = _fnum(request.form.get('entry'), store["saved_entry"])
+        close = _fnum(request.form.get('close'), store["saved_close"])
+        store["saved_entry"] = entry
+        store["saved_close"] = close
+        _save_store(store)
+    entry     = store["saved_entry"]
+    close     = store["saved_close"]
+    contracts = store["saved_contracts"]
     pl = (entry - close) * contracts * 100
     pl_str = f"+${pl:,.0f}" if pl >= 0 else f"-${abs(pl):,.0f}"
-    return render_template('partials/trade_stats.html', pl=pl_str)
+    return render_template('partials/trade.html', store=store, pl=pl_str)
 
 
 @trading_bp.route('/api/trading/prob')
 def api_prob():
     store = _get_store()
-    selected_short = _fnum(request.args.get('short'), store.get("selected_short"))
-    selected_long  = _fnum(request.args.get('long'),  store.get("selected_long"))
+    selected_short = store.get("selected_short")
+    selected_long  = store.get("selected_long")
     live_puts_df = get_spx_puts()
 
     short_prob = long_prob = "—"
@@ -342,7 +421,7 @@ def api_day_chart():
             period_label, df['Close'], df.index, color, halo,
             selected_short=selected_short, selected_long=selected_long,
         )
-    return _chart_html('day-chart', fig)
+    return _chart_html('day-chart', fig, selected_short=selected_short, selected_long=selected_long)
 
 
 @trading_bp.route('/api/trading/month-chart')
@@ -385,6 +464,7 @@ def api_month_chart():
         events = get_financial_events(df.index.min(), lookahead)
 
     candle_data = None if show_line else df
+
     store = _get_store()
     selected_short = store.get("selected_short")
     selected_long  = store.get("selected_long")
@@ -395,7 +475,7 @@ def api_month_chart():
         ohlc_df=candle_data,
         selected_short=selected_short, selected_long=selected_long,
     )
-    return _chart_html('month-chart', fig)
+    return _chart_html('month-chart', fig, selected_short=selected_short, selected_long=selected_long)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -407,13 +487,15 @@ def _fnum(val, default=0):
         return float(default)
 
 
-def _chart_html(div_id: str, fig: go.Figure) -> str:
-    import json as _json
-    fig_json = fig.to_json()
+def _chart_html(div_id: str, fig: go.Figure, selected_short=None, selected_long=None) -> str:
+    # data-short / data-long are read by positionStrikePills() in base.html to
+    # render HTML pill overlays (more reliable than Plotly layout.annotations).
+    fig_json = html.escape(fig.to_json(), quote=True)
+    strike_attrs = (
+        f' data-short="{int(selected_short)}" data-long="{int(selected_long)}"'
+        if selected_short is not None else ''
+    )
     return (
-        f'<div id="{div_id}" data-plotly=\'{fig_json}\' style="width:100%;height:100%"></div>'
-        f'<script>Plotly.react("{div_id}", '
-        f'JSON.parse(document.getElementById("{div_id}").dataset.plotly).data, '
-        f'JSON.parse(document.getElementById("{div_id}").dataset.plotly).layout, '
-        f'{{responsive:true,displayModeBar:false}});</script>'
+        f'<div id="{div_id}" data-plotly="{fig_json}"{strike_attrs} '
+        f'style="position:relative;width:100%;height:100%"></div>'
     )

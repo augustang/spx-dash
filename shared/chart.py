@@ -97,43 +97,83 @@ def create_spx_chart(
     else:
         min_date, padded_max_date = None, None
 
-    if selected_short is not None and selected_long is not None:
-        fig.add_hline(
-            y=selected_short, line_dash="solid", line_color="#4B7BFF",
-            annotation_text=f"Short strike ({selected_short})",
-            annotation_position="top left",
-            annotation=dict(font_size=8, font_color="white", bgcolor="#4B7BFF", borderpad=3, bordercolor="#4B7BFF")
-        )
-        fig.add_hline(
-            y=selected_long, line_dash="solid", line_color="#FF6347",
-            annotation_text=f"Long strike ({selected_long})",
-            annotation_position="bottom left",
-            annotation=dict(font_size=8, font_color="white", bgcolor="#FF6347", borderpad=3, bordercolor="#FF6347")
-        )
+    strike_margin_r = 4
+    if selected_short is not None and selected_long is not None and min_date is not None:
+        # Lines stay as Scatter traces (data) — those are diffed reliably by
+        # Plotly.react and never flicker. Labels use xref='paper' so they sit
+        # outside the data grid, anchored to the right edge of the plot area.
+        # The right margin is expanded to give the pills room.
+        # Rounded corners come from the CSS rule in style.css targeting
+        # rect.bg inside .annotation (SVG rx/ry).
+        strike_margin_r = 36
+        x_left = view_range if view_range is not None else min_date
+        x_line = [x_left, padded_max_date]
+        fig.add_trace(go.Scatter(
+            x=x_line, y=[selected_short, selected_short],
+            mode='lines',
+            line=dict(color="#3f73fa", width=1),
+            showlegend=False, hoverinfo='skip',
+        ))
+        fig.add_trace(go.Scatter(
+            x=x_line, y=[selected_long, selected_long],
+            mode='lines',
+            line=dict(color="#ff633d", width=1),
+            showlegend=False, hoverinfo='skip',
+        ))
+        # Pills are rendered as HTML overlays in JS (see base.html positionStrikePills).
+        # The right margin whitespace is kept so the lines don't run into the pill area.
 
     if events:
+        # Only render events within the visible view window — events before view_range
+        # would be clipped anyway and add noise to the layout.
+        x_left = view_range if view_range is not None else min_date
         grouped = defaultdict(list)
         for evt_date, evt_label in events:
             grouped[evt_date].append(evt_label)
+        line_xs, line_ys = [], []   # batched vertical lines (None-separated segments)
+        lbl_xs, lbl_ys, lbl_texts = [], [], []
+        y_lo = y_range[0] if y_range else (prices.min() if len(prices) > 0 else 0)
+        y_hi = y_range[1] if y_range else (prices.max() if len(prices) > 0 else 0)
         for evt_date, labels in grouped.items():
-            evt_dt = datetime.datetime.combine(evt_date, datetime.time()) if isinstance(evt_date, datetime.date) else evt_date
-            if min_date is not None and pd.Timestamp(min_date) <= pd.Timestamp(evt_dt) <= pd.Timestamp(padded_max_date):
-                combined = ", ".join(labels)
-                fig.add_shape(
-                    type="line", x0=evt_dt, x1=evt_dt, y0=0, y1=1,
-                    yref="paper", line=dict(dash="1px,3px", color="#B2B2B2", width=1),
-                )
-                fig.add_annotation(
-                    x=evt_dt, y=1.01, yref="paper", text=combined,
-                    textangle=-90, font=dict(size=7, color="#888888"),
-                    showarrow=False, yanchor="bottom", xanchor="center",
-                )
+            evt_dt = (datetime.datetime.combine(evt_date, datetime.time())
+                      if isinstance(evt_date, datetime.date) else evt_date)
+            if x_left is None or not (pd.Timestamp(x_left) <= pd.Timestamp(evt_dt) <= pd.Timestamp(padded_max_date)):
+                continue
+            line_xs += [evt_dt, evt_dt, None]
+            line_ys += [y_lo, y_hi, None]
+            lbl_xs.append(evt_dt)
+            lbl_ys.append(y_hi)
+            lbl_texts.append(", ".join(labels))
+        # Vertical dashed lines as Scatter traces (layout.shapes are dropped by Plotly.react)
+        if line_xs:
+            fig.add_trace(go.Scatter(
+                x=line_xs, y=line_ys, mode='lines',
+                line=dict(dash='dot', color="#B2B2B2", width=1),
+                showlegend=False, hoverinfo='skip', cliponaxis=False,
+            ))
+        # Labels above the chart, rotated — cliponaxis=False lets them sit in the top margin
+        if lbl_xs:
+            fig.add_trace(go.Scatter(
+                x=lbl_xs, y=lbl_ys, mode='text',
+                text=lbl_texts,
+                textposition='bottom center',
+                textangle=-90,
+                textfont=dict(size=7, color='#888888', family='Inter, sans-serif'),
+                showlegend=False, hoverinfo='skip', cliponaxis=False,
+            ))
 
+    # uirevision: preserve user-driven UI state (zoom, pan) across Plotly.react
+    # calls *as long as the value doesn't change*. We tie it to the selected
+    # strikes so that picking a new spread RESETS the view (allowing the new
+    # strike line to expand the y-range), while routine 60s price refreshes
+    # keep the same uirevision and preserve any zoom the user has applied.
+    ui_rev = f"strikes-{selected_short}-{selected_long}"
     fig.update_layout(
+        font=dict(family="Inter, sans-serif"),
         dragmode="zoom",
-        uirevision="constant",
+        uirevision=ui_rev,
         height=chart_height,
-        margin=dict(l=4, r=4, t=70 if events else 10, b=30),
+        margin=dict(l=4, r=strike_margin_r, t=70 if events else 10, b=30),
         plot_bgcolor="white", paper_bgcolor="white",
         hovermode="x" if ohlc_df is not None else "x unified",
         hoverdistance=100 if ohlc_df is not None else -1,
@@ -146,6 +186,7 @@ def create_spx_chart(
         xaxis=dict(
             showgrid=True, gridcolor="#F0F0F0",
             tickfont=dict(color="#808080", size=8),
+            ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             range=[view_range if view_range is not None else min_date, padded_max_date] if min_date else None,
             rangeslider=dict(visible=False),
             showspikes=True, spikemode="across",
@@ -156,6 +197,7 @@ def create_spx_chart(
             automargin=True,
             showgrid=True, gridcolor="#F0F0F0", side="left",
             tickfont=dict(color="#808080", size=8),
+            ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             range=y_range,
             showspikes=True, spikemode="across", spikesnap="cursor", spikedash="1, 3",
             spikecolor="#B2B2B2", spikethickness=1

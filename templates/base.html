@@ -13,9 +13,14 @@
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
 <header class="spx-header">
   <div class="spx-header-left">
-    <span class="header-date">{{ header.date_bold }} <span class="header-date-rest">{{ header.date_rest }}</span></span>
-    <span class="header-time">{{ header.time }}</span>
-    <span class="header-status">{{ header.status }}</span>
+    <span class="header-date-group">
+      <span class="header-date">{{ header.date_bold }}</span>
+      <span class="header-date-rest">{{ header.date_rest }}</span>
+    </span>
+    <span class="header-time-group">
+      <span class="header-time">{{ header.time }}</span>
+      <span class="header-status">{{ header.status }}</span>
+    </span>
   </div>
   <nav class="spx-nav">
     <a href="/" class="spx-nav-link {% if active_page == 'trading' %}active{% endif %}">
@@ -33,6 +38,88 @@
 <main>
   {% block content %}{% endblock %}
 </main>
+
+<script>
+// Render any Plotly chart that arrives via HTMX. Routes return
+// <div id="..." data-plotly="..." data-short="..." data-long="..."></div>
+// and this handler hydrates it. We use a global afterSwap listener (instead
+// of inline <script> tags) because htmx 2.x doesn't reliably re-execute
+// inline scripts on every swap.
+
+// Position strike-price pills as HTML divs overlaid on the chart.
+// This is more reliable than Plotly layout.annotations, which disappear
+// when uirevision changes on spread selection.
+function positionStrikePills(el) {
+  el.querySelectorAll('.strike-pill').forEach(function(p) { p.remove(); });
+  var short = el.dataset.short, long_ = el.dataset.long;
+  if (!short || !el._fullLayout) return;
+
+  var ly = el._fullLayout;
+  var yrange = ly.yaxis.range;
+  var yMin = yrange[0], yMax = yrange[1];
+  // _size gives the actual plot-area rectangle in pixels (excludes margins)
+  var plotTop = ly._size.t;
+  var plotH = ly._size.h;
+
+  var strikes = [
+    { val: +short, color: '#3f73fa' },
+    { val: +long_,  color: '#ff633d' },
+  ].map(function(s) {
+    var frac = (s.val - yMin) / (yMax - yMin);
+    return { val: s.val, color: s.color, py: plotTop + plotH * (1 - frac) };
+  });
+
+  // Separate overlapping pills: if centres are closer than minGap px, push
+  // each one away from the midpoint until they're minGap apart.
+  var minGap = 16;
+  var dist = strikes[1].py - strikes[0].py; // long is lower (higher index = lower price)
+  if (Math.abs(dist) < minGap) {
+    var mid = (strikes[0].py + strikes[1].py) / 2;
+    strikes[0].py = mid - minGap / 2;
+    strikes[1].py = mid + minGap / 2;
+  }
+
+  strikes.forEach(function(s) {
+      // Skip if the strike is outside the visible plot area
+      if (s.py < plotTop - 8 || s.py > plotTop + plotH + 8) return;
+    var pill = document.createElement('div');
+    pill.className = 'strike-pill';
+    pill.textContent = s.val;
+    pill.style.cssText = [
+      'position:absolute',
+      'top:' + s.py + 'px',
+      'right:2px',
+      'transform:translateY(-50%)',
+      'background:' + s.color,
+      'color:#fff',
+        'font-size:8px',
+        'padding:2px 4px',
+        'border-radius:4px',
+        'pointer-events:none',
+        'font-family:Inter,sans-serif',
+        'line-height:1.4',
+        'letter-spacing:-0.02em',
+      'z-index:10',
+    ].join(';');
+    el.appendChild(pill);
+  });
+}
+
+document.addEventListener('htmx:afterSwap', function(e) {
+  e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
+    try {
+      var fig = JSON.parse(el.dataset.plotly);
+      Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
+      positionStrikePills(el);
+      // Re-position pills after any zoom / pan / autorange relayout
+      el.on('plotly_relayout', function() { positionStrikePills(el); });
+      el.on('plotly_afterplot', function() { positionStrikePills(el); });
+    } catch (err) {
+      console.error('Plotly render failed', err, el);
+    }
+  });
+});
+</script>
 
 </body>
 </html>

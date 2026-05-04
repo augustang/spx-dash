@@ -63,6 +63,32 @@ main {
 .row-4col        { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
 .row-2col-study  { display: grid; grid-template-columns: 5fr 7fr;         gap: 24px; }
 
+@media (max-width: 1385px) {
+    .page-grid,
+    .row-2col,
+    .row-3col,
+    .row-4col,
+    .row-2col-study {
+        grid-template-columns: 1fr;
+    }
+    .metrics-wrap .row-3col {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .spx-header {
+        padding: 16px 20px 16px;
+    }
+    .spx-header-left {
+        flex-wrap: wrap;
+        gap: 4px 16px;
+    }
+    .spx-header-left {
+        gap: 4px 16px;
+    }
+}
+
 .mb-2 { margin-bottom: 8px; }
 .mb-3 { margin-bottom: 16px; }
 .mb-4 { margin-bottom: 24px; }
@@ -76,10 +102,13 @@ main {
     padding-top: 24px;
 }
 
-.header-date      { font-size: 16px; font-weight: 400; color: var(--text); }
-.header-date-rest { font-weight: 400; }
-.header-time      { color: var(--purple); margin-left: 15px; font-size: 16px; }
-.header-status    { color: var(--purple-light); font-size: 16px; margin-left: 4px; }
+.spx-header-left  { display: flex; align-items: center; gap: 15px; }
+.header-date-group { display: inline-flex; align-items: center; gap: 8px; }
+.header-time-group { display: inline-flex; align-items: center; gap: 8px; }
+.header-date      { font-size: 16px; font-weight: 500; color: var(--text); }
+.header-date-rest { font-size: 16px; font-weight: 400; color: var(--text-subtle, #808080); }
+.header-time      { color: var(--purple); font-size: 16px; }
+.header-status    { color: var(--purple-light); font-size: 16px; opacity: 0.7; }
 
 .spx-nav {
     display: flex;
@@ -94,8 +123,8 @@ main {
     align-items: center;
 }
 
-.spx-nav-link span { font-size: 14px; font-weight: 400; color: var(--muted); }
-.spx-nav-link.active span { color: var(--text); }
+.spx-nav-link { font-size: 14px; font-weight: 400; color: var(--text); transition: opacity 0.1s; }
+.spx-nav-link:hover { opacity: 0.5; }
 
 .spx-nav-dot {
     width: 4px;
@@ -116,13 +145,13 @@ main {
 
 .section-label {
     background: rgba(0,0,0,0.05);
-    padding: 4px 10px;
-    border-radius: 16px;
+    padding: 4px 8px;
+    border-radius: 8px;
     font-size: 12px;
     font-weight: 400;
     color: var(--text);
     display: inline-block;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 /* ── Metric typography ────────────────────────────────────────────────────── */
@@ -149,6 +178,7 @@ main {
     font-size: 12px;
     color: var(--text);
     font-weight: 400;
+    margin-top: 0;
     margin-bottom: 8px;
     line-height: 1.2;
     display: block;
@@ -227,7 +257,7 @@ main {
     padding: 4px 6px;
     border-radius: 8px;
     border: none;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 400;
     cursor: pointer;
     color: #808080;
@@ -241,6 +271,43 @@ main {
 .pill-label:has(input:checked) {
     background: var(--text);
     color: #fff;
+}
+
+/* ── Toggle switch ────────────────────────────────────────────────────────── */
+.toggle-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+.toggle-wrap input[type="checkbox"] { display: none; }
+.toggle-track {
+    width: 19px;
+    height: 11px;
+    background: rgba(0,0,0,0.12);
+    border-radius: 6px;
+    position: relative;
+    transition: background 0.18s;
+    flex-shrink: 0;
+}
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    top: 1.5px;
+    left: 1.5px;
+    transition: transform 0.18s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.toggle-wrap input:checked ~ .toggle-track { background: var(--text); }
+.toggle-wrap input:checked ~ .toggle-track::after { transform: translateX(8px); }
+.toggle-label {
+    font-size: 10px;
+    color: #808080;
 }
 
 /* ── Chart controls row ───────────────────────────────────────────────────── */
@@ -271,6 +338,52 @@ select.figma-dropdown {
     background-size: 16px 16px;
     padding-right: 32px;
 }
+
+/* ── Spreads grid (Figma-styled) ──────────────────────────────────────────── */
+.spreads-scroll {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.spreads-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.spreads-row {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    padding: 0 6px;
+    height: 22px;
+    border-radius: 8px;
+    font-size: 12px;
+    letter-spacing: -0.04em;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.spreads-row.spreads-header {
+    font-size: 10px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    cursor: default;
+    height: 28px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--bg);
+    border-radius: 0;
+}
+
+.spreads-row.spreads-header + .spreads-row { margin-top: 6px; }
+.spreads-row.highlighted { background: #ECFF8B; }
+.spreads-row:not(.spreads-header):not(.highlighted):hover { background: rgba(0,0,0,0.03); }
+.spreads-row.highlighted:hover { background: #DEF577; }
+.spreads-row.selected { background: #1A1A1A; color: #fff; }
+.spreads-row.selected.highlighted { background: #1A1A1A; color: #fff; }
+
 
 /* ── Table ────────────────────────────────────────────────────────────────── */
 .table {
@@ -379,6 +492,7 @@ select.figma-dropdown {
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
 .bm-note-wrap:hover .bm-note-tip { display: block; }
+
 
 /* ── Loading placeholder ──────────────────────────────────────────────────── */
 .loading-placeholder {

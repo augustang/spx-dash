@@ -1,0 +1,50 @@
+<form id="trade-form" class="row-4col"
+      hx-post="/api/trading/trade"
+      hx-trigger="change"
+      hx-target="#trade-card"
+      hx-swap="innerHTML">
+  <!-- Entry PX -->
+  <div>
+    <label class="field-label">Entry PX</label>
+    <div class="num-field-row">
+      <input id="input-entry" name="entry" type="number" step="0.05"
+             value="{{ "%.2f"|format(store.saved_entry) }}"
+             class="num-field-input" />
+      <div class="icon-btn-group">
+        <button type="button" class="icon-btn" data-field="input-entry" data-dir="-0.05">
+          <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
+        </button>
+        <button type="button" class="icon-btn" data-field="input-entry" data-dir="+0.05">
+          <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Current PX (readonly) -->
+  <div>
+    <label class="field-label">Current PX</label>
+    <div class="stat-field">{{ "%.2f"|format(store.selected_spread_px) }}</div>
+  </div>
+  <!-- Realistic close -->
+  <div>
+    <label class="field-label">Realistic close</label>
+    <div class="num-field-row">
+      <input id="input-close" name="close" type="number" step="0.05"
+             value="{{ "%.2f"|format(store.saved_close) }}"
+             class="num-field-input" />
+      <div class="icon-btn-group">
+        <button type="button" class="icon-btn" data-field="input-close" data-dir="-0.05">
+          <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
+        </button>
+        <button type="button" class="icon-btn" data-field="input-close" data-dir="+0.05">
+          <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Realistic P/L -->
+  <div>
+    <label class="field-label">Realistic P/L</label>
+    <div class="stat-field">{{ pl }}</div>
+  </div>
+</form>

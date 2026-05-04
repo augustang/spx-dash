@@ -7,15 +7,23 @@
   <!-- ── Left column ──────────────────────────────────────────────────── -->
   <div class="col-left">
 
-    <!-- Metrics -->
+    <!-- Metrics + Inputs -->
     <div class="section-label">Metrics</div>
     <div class="card mb-3">
-      <div class="card-body"
-           id="metrics-container"
-           hx-get="/api/trading/metrics"
-           hx-trigger="load, every 60s"
-           hx-swap="innerHTML">
-        <div class="loading-placeholder">Loading…</div>
+      <div class="card-body">
+        <div id="metrics-container"
+             hx-get="/api/trading/metrics"
+             hx-trigger="load, every 60s"
+             hx-swap="innerHTML">
+          <div class="loading-placeholder">Loading…</div>
+        </div>
+        <hr style="margin:32px 0 0;border:none;border-top:1px solid var(--bg)" />
+        <div id="inputs-container"
+             hx-get="/api/trading/inputs"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+          <div class="loading-placeholder">Loading…</div>
+        </div>
       </div>
     </div>
 
@@ -25,8 +33,8 @@
       <div class="card-body">
         <div id="spreads-container"
              hx-get="/api/trading/spreads"
-             hx-trigger="load, every 60s"
-             hx-include="#trade-inputs"
+             hx-trigger="load, every 60s, inputs-saved from:body"
+             hx-sync="this:replace"
              hx-swap="innerHTML">
           <div class="loading-placeholder">Loading…</div>
         </div>
@@ -36,63 +44,11 @@
     <!-- Current trade -->
     <div class="section-label">Current trade</div>
     <div class="card mb-3">
-      <div class="card-body">
-        <div class="row-4col">
-          <!-- Entry PX -->
-          <div>
-            <label class="field-label">Entry PX</label>
-            <div class="num-field-row">
-              <input id="input-entry" name="entry" type="number" step="0.05"
-                     value="{{ store.saved_entry }}"
-                     class="num-field-input"
-                     hx-get="/api/trading/trade-stats"
-                     hx-trigger="change"
-                     hx-include="#trade-inputs"
-                     hx-target="#trade-stats" />
-              <div class="icon-btn-group">
-                <button type="button" class="icon-btn" data-field="input-entry" data-dir="-0.05">
-                  <img src="{{ url_for('static', filename='icons/Edit/Remove_Minus.svg') }}" width="16" height="16" />
-                </button>
-                <button type="button" class="icon-btn" data-field="input-entry" data-dir="+0.05">
-                  <img src="{{ url_for('static', filename='icons/Edit/Add_Plus.svg') }}" width="16" height="16" />
-                </button>
-              </div>
-            </div>
-          </div>
-          <!-- Current PX (readonly, from selected spread) -->
-          <div>
-            <label class="field-label">Current PX</label>
-            <div class="stat-field" id="current-px">{{ "%.2f"|format(store.selected_spread_px) }}</div>
-          </div>
-          <!-- Realistic close -->
-          <div>
-            <label class="field-label">Realistic close</label>
-            <div class="num-field-row">
-              <input id="input-close" name="close" type="number" step="0.05"
-                     value="{{ "%.2f"|format(store.saved_close) }}"
-                     class="num-field-input"
-                     hx-get="/api/trading/trade-stats"
-                     hx-trigger="change"
-                     hx-include="#trade-inputs"
-                     hx-target="#trade-stats" />
-              <div class="icon-btn-group">
-                <button type="button" class="icon-btn" data-field="input-close" data-dir="-0.05">
-                  <img src="{{ url_for('static', filename='icons/Edit/Remove_Minus.svg') }}" width="16" height="16" />
-                </button>
-                <button type="button" class="icon-btn" data-field="input-close" data-dir="+0.05">
-                  <img src="{{ url_for('static', filename='icons/Edit/Add_Plus.svg') }}" width="16" height="16" />
-                </button>
-              </div>
-            </div>
-          </div>
-          <!-- Realistic P/L -->
-          <div id="trade-stats"
-               hx-get="/api/trading/trade-stats"
-               hx-trigger="load"
-               hx-include="#trade-inputs"
-               hx-swap="innerHTML">
-          </div>
-        </div>
+      <div class="card-body" id="trade-card"
+           hx-get="/api/trading/trade"
+           hx-trigger="load, spread-selected from:body"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder">Loading…</div>
       </div>
     </div>
 
@@ -102,8 +58,7 @@
       <div class="card-body">
         <div id="prob-section"
              hx-get="/api/trading/prob"
-             hx-trigger="load"
-             hx-include="#trade-inputs"
+             hx-trigger="load, spread-selected from:body"
              hx-swap="innerHTML">
         </div>
       </div>
@@ -126,7 +81,7 @@
                      {% if loop.first %}checked{% endif %}
                      hx-get="/api/trading/day-chart"
                      hx-trigger="change"
-                     hx-include="[name='day_period'], #trade-inputs"
+                     hx-include="[name='day_period']"
                      hx-target="#day-chart-container"
                      style="display:none" />
               {{ opt }}
@@ -136,8 +91,9 @@
         </div>
         <div id="day-chart-container"
              hx-get="/api/trading/day-chart"
-             hx-trigger="load, every 60s"
-             hx-include="[name='day_period'], #trade-inputs"
+             hx-trigger="load, every 60s, spread-selected from:body"
+             hx-include="[name='day_period']"
+             hx-sync="this:replace"
              hx-swap="innerHTML">
           <div class="loading-placeholder" style="height:420px"></div>
         </div>
@@ -155,34 +111,30 @@
                      {% if opt == '6 Months' %}checked{% endif %}
                      hx-get="/api/trading/month-chart"
                      hx-trigger="change"
-                     hx-include="[name='month_period'], [name='show_events'], [name='show_line'], #trade-inputs"
+                     hx-include="[name='month_period'], [name='show_line']"
                      hx-target="#month-chart-container"
                      style="display:none" />
               {{ opt }}
             </label>
             {% endfor %}
           </div>
-          <label class="pill-label">
-            <input type="checkbox" name="show_events" value="1"
-                   hx-get="/api/trading/month-chart"
-                   hx-trigger="change"
-                   hx-include="[name='month_period'], [name='show_events'], [name='show_line'], #trade-inputs"
-                   hx-target="#month-chart-container" />
-            Events
-          </label>
-          <label class="pill-label">
-            <input type="checkbox" name="show_line" value="1"
-                   hx-get="/api/trading/month-chart"
-                   hx-trigger="change"
-                   hx-include="[name='month_period'], [name='show_events'], [name='show_line'], #trade-inputs"
-                   hx-target="#month-chart-container" />
-            Line
-          </label>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:4px">
+            <label class="toggle-wrap">
+              <input type="checkbox" name="show_line" value="1"
+                     hx-get="/api/trading/month-chart"
+                     hx-trigger="change"
+                     hx-include="[name='month_period'], [name='show_line']"
+                     hx-target="#month-chart-container" />
+              <span class="toggle-track"></span>
+              <span class="toggle-label">Line</span>
+            </label>
+          </div>
         </div>
         <div id="month-chart-container"
              hx-get="/api/trading/month-chart"
-             hx-trigger="load, every 120s"
-             hx-include="[name='month_period'], [name='show_events'], [name='show_line'], #trade-inputs"
+             hx-trigger="load, every 120s, spread-selected from:body"
+             hx-include="[name='month_period'], [name='show_line']"
+             hx-sync="this:replace"
              hx-swap="innerHTML">
           <div class="loading-placeholder" style="height:500px"></div>
         </div>
@@ -191,18 +143,6 @@
 
   </div><!-- /col-right -->
 </div><!-- /page-grid -->
-
-<!-- Hidden form carrying trade session state for hx-include -->
-<form id="trade-inputs" style="display:none">
-  <input type="hidden" name="bp"        id="h-bp"        value="{{ store.saved_bp }}" />
-  <input type="hidden" name="sw"        id="h-sw"        value="{{ store.saved_spread }}" />
-  <input type="hidden" name="contracts" id="h-contracts" value="{{ store.saved_contracts }}" />
-  <input type="hidden" name="target"    id="h-target"    value="{{ store.saved_target }}" />
-  <input type="hidden" name="short"     id="h-short"     value="{{ store.selected_short or '' }}" />
-  <input type="hidden" name="long"      id="h-long"      value="{{ store.selected_long or '' }}" />
-  <input type="hidden" name="entry"     id="h-entry"     value="{{ store.saved_entry }}" />
-  <input type="hidden" name="close"     id="h-close"     value="{{ store.saved_close }}" />
-</form>
 
 <script>
 // ── Stepper buttons ──────────────────────────────────────────────────────────
@@ -214,7 +154,14 @@ document.addEventListener('click', function(e) {
   const input = document.getElementById(fieldId);
   if (!input) return;
   const val = parseFloat(input.value) || 0;
-  input.value = Math.max(0, Math.round((val + dir) * 100) / 100).toFixed(2);
+  const newVal = Math.max(0, Math.round((val + dir) * 100) / 100);
+  // Use 2dp for entry/close (where step < 1), integer-style display for the rest
+  input.value = (Math.abs(dir) < 1) ? newVal.toFixed(2) : String(Math.round(newVal));
+  // If this stepper belongs to the inputs form, propagate _triggered name
+  const triggeredField = document.getElementById('triggered-field');
+  if (triggeredField && btn.dataset.name) {
+    triggeredField.value = btn.dataset.name;
+  }
   input.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
@@ -228,12 +175,5 @@ document.addEventListener('change', function(e) {
   }
 });
 
-// ── Render Plotly charts injected by HTMX ───────────────────────────────────
-document.addEventListener('htmx:afterSwap', function(e) {
-  e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
-    const fig = JSON.parse(el.dataset.plotly);
-    Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
-  });
-});
 </script>
 {% endblock %}

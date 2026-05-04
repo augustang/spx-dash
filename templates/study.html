@@ -23,22 +23,26 @@
           </label>
           {% endfor %}
         </div>
-        <label class="pill-label">
-          <input type="checkbox" name="show_events" value="1"
-                 hx-get="/api/study/long-chart"
-                 hx-trigger="change"
-                 hx-include="[name='range'], [name='show_events'], [name='show_line']"
-                 hx-target="#long-chart-container" />
-          Events
-        </label>
-        <label class="pill-label">
-          <input type="checkbox" name="show_line" value="1"
-                 hx-get="/api/study/long-chart"
-                 hx-trigger="change"
-                 hx-include="[name='range'], [name='show_events'], [name='show_line']"
-                 hx-target="#long-chart-container" />
-          Line
-        </label>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <label class="pill-label">
+            <input type="checkbox" name="show_events" value="1"
+                   hx-get="/api/study/long-chart"
+                   hx-trigger="change"
+                   hx-include="[name='range'], [name='show_events'], [name='show_line']"
+                   hx-target="#long-chart-container"
+                   style="display:none" />
+            Events
+          </label>
+          <label class="pill-label">
+            <input type="checkbox" name="show_line" value="1"
+                   hx-get="/api/study/long-chart"
+                   hx-trigger="change"
+                   hx-include="[name='range'], [name='show_events'], [name='show_line']"
+                   hx-target="#long-chart-container"
+                   style="display:none" />
+            Line
+          </label>
+        </div>
       </div>
       <div id="long-chart-container"
            hx-get="/api/study/long-chart?range=1Y"
@@ -153,12 +157,6 @@
 </div>
 
 <script>
-document.addEventListener('htmx:afterSwap', function(e) {
-  e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
-    const fig = JSON.parse(el.dataset.plotly);
-    Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
-  });
-});
 document.addEventListener('change', function(e) {
   if (e.target.type === 'radio') {
     const group = e.target.closest('.pill-group');

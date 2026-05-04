@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import html
 import json
 import os
 
@@ -334,14 +335,10 @@ def _build_header_ctx():
 # ── Chart helper ─────────────────────────────────────────────────────────────
 
 def _chart_html(div_id: str, fig: go.Figure) -> str:
-    fig_json = fig.to_json()
+    fig_json = html.escape(fig.to_json(), quote=True)
     return (
-        f'<div id="{div_id}" style="width:100%;height:100%"></div>'
-        f'<script>'
-        f'(function(){{var fig={fig_json};'
-        f'Plotly.react("{div_id}",fig.data,fig.layout,{{responsive:true,displayModeBar:false}});'
-        f'}})();'
-        f'</script>'
+        f'<div id="{div_id}" data-plotly="{fig_json}" '
+        f'style="width:100%;height:100%"></div>'
     )
 
 
@@ -668,6 +665,7 @@ def _build_cmp_charts_html(store) -> str:
             ))
     cmp_fig.add_hline(y=0, line_dash="dot", line_color="#B2B2B2", line_width=1)
     cmp_fig.update_layout(
+        font=dict(family="Inter, sans-serif"),
         dragmode="zoom", uirevision="constant", height=560,
         margin=dict(l=60, r=20, t=10, b=30),
         plot_bgcolor="white", paper_bgcolor="white", hovermode="x unified",
@@ -871,6 +869,7 @@ def _build_cc_results_html(store) -> str:
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
         ofig.update_layout(
+            font=dict(family="Inter, sans-serif"),
             height=400, margin=dict(l=60, r=20, t=16, b=30),
             plot_bgcolor="white", paper_bgcolor="white", hovermode="closest",
             xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
@@ -990,6 +989,7 @@ def _build_histogram_figure(eod_series: pd.Series) -> go.Figure:
                         text=f"median {med:+.2f}%", showarrow=False,
                         xanchor="left", yanchor="bottom", font=dict(size=10, color="#888888"))
     fig.update_layout(
+        font=dict(family="Inter, sans-serif"),
         height=260, margin=dict(l=50, r=20, t=46, b=40),
         plot_bgcolor="white", paper_bgcolor="white", bargap=0.06,
         xaxis=dict(showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",

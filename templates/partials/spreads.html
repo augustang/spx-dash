@@ -1,35 +1,35 @@
 {% if not spreads %}
 <p style="font-size:12px;color:#888">No spreads available — options data may be unavailable outside market hours.</p>
 {% else %}
-<div style="height:350px;overflow-y:auto">
-  <table class="table" style="font-size:11px">
-    <thead>
-      <tr>
-        {% for col in ['Pts', '(%)', 'Strike', 'Leg', 'Short PX', 'Long PX', 'Spread', 'Premiums'] %}
-        <th>{{ col }}</th>
-        {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in spreads %}
-      <tr class="spread-row {% if row.Premiums >= target %}spread-highlight{% endif %}"
-          style="cursor:pointer"
-          hx-post="/api/trading/select-spread"
-          hx-vals='{"short": {{ row.Strike }}, "long": {{ row.Leg }}, "spread_px": {{ row.Spread }}}'
-          hx-trigger="click"
-          hx-swap="none"
-          onclick="this.parentElement.querySelectorAll('tr').forEach(r=>r.classList.remove('selected'));this.classList.add('selected')">
-        <td>{{ row.Pts }}</td>
-        <td>{{ row['(%)'] }}</td>
-        <td>{{ row.Strike }}</td>
-        <td>{{ row.Leg }}</td>
-        <td>{{ row['Short PX'] }}</td>
-        <td>{{ row['Long PX'] }}</td>
-        <td>{{ row.Spread }}</td>
-        <td>{{ row.Premiums|int }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="spreads-scroll">
+  <div class="spreads-grid">
+    <div class="spreads-row spreads-header">
+      <div>Pts</div>
+      <div>(%)</div>
+      <div>Strike</div>
+      <div>Leg</div>
+      <div>Short PX</div>
+      <div>Long PX</div>
+      <div>Spread</div>
+      <div>Premiums</div>
+    </div>
+    {% for row in spreads %}
+    <div class="spreads-row {% if row.Premiums >= target %}highlighted{% endif %} {% if selected_short and row.Strike == selected_short|int %}selected{% endif %}"
+         hx-post="/api/trading/select-spread"
+         hx-vals='{"short": {{ row.Strike }}, "long": {{ row.Leg }}, "spread_px": {{ row.Spread }}}'
+         hx-trigger="click"
+         hx-swap="none"
+         onclick="if (this.classList.contains('selected')) { this.classList.remove('selected'); } else { this.parentElement.querySelectorAll('.spreads-row').forEach(r=>r.classList.remove('selected')); this.classList.add('selected'); }">
+      <div>-{{ row.Pts }}</div>
+      <div>-{{ row['(%)'] }}</div>
+      <div>{{ row.Strike }}</div>
+      <div>{{ row.Leg }}</div>
+      <div>{{ "%.2f"|format(row['Short PX']) }}</div>
+      <div>{{ "%.2f"|format(row['Long PX']) }}</div>
+      <div>{{ "%.2f"|format(row.Spread) }}</div>
+      <div>${{ "{:,}".format(row.Premiums|int) }}</div>
+    </div>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
