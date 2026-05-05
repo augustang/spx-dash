@@ -21,7 +21,7 @@ from flask import Blueprint, render_template, request, session
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart
+from shared.chart import create_spx_chart, create_long_chart
 from shared.events import FOMC_DATES, get_financial_events
 
 study_bp = Blueprint('study', __name__)
@@ -342,11 +342,17 @@ def _build_header_ctx():
 
 # ── Chart helper ─────────────────────────────────────────────────────────────
 
-def _chart_html(div_id: str, fig: go.Figure) -> str:
+def _chart_html(div_id: str, fig: go.Figure, evt_payload=None) -> str:
     fig_json = html.escape(fig.to_json(), quote=True)
+    evt_attr = (
+        f' data-events="{html.escape(json.dumps(evt_payload), quote=True)}"'
+        if evt_payload else ''
+    )
     return (
-        f'<div id="{div_id}" data-plotly="{fig_json}" '
+        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:100%">'
+        f'<div id="{div_id}" data-plotly="{fig_json}"{evt_attr} '
         f'style="width:100%;height:100%"></div>'
+        f'</div>'
     )
 
 
@@ -378,7 +384,7 @@ def api_long_chart():
     years = range_params.get(selected_range, 1)
     df_long = get_spx_daily(years)
     if df_long.empty:
-        return _chart_html('study-long-chart', go.Figure())
+        return _chart_html('study-long-chart', go.Figure(), evt_payload=None)
     last_close = float(df_long['Close'].iloc[-1])
     first_open = float(df_long['Open'].iloc[0])
     is_down    = (last_close - first_open) < 0
@@ -388,13 +394,13 @@ def api_long_chart():
     if show_events:
         lookahead = df_long.index.max() + pd.DateOffset(months=1)
         events = get_financial_events(df_long.index.min(), lookahead)
-    candle_data = None if show_line else df_long
-    fig = create_spx_chart(
-        selected_range, df_long['Close'], df_long.index,
+    ohlc_df = None if show_line else df_long
+    fig, evt_payload = create_long_chart(
+        df_long['Close'], df_long.index,
         line_color, halo_color,
-        events=events, chart_height=680, ohlc_df=candle_data,
+        events=events, chart_height=500, ohlc_df=ohlc_df,
     )
-    return _chart_html('study-long-chart', fig)
+    return _chart_html('study-long-chart', fig, evt_payload=evt_payload)
 
 
 # ── Section 2: Intraday explorer ─────────────────────────────────────────────

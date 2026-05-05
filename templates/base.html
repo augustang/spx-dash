@@ -108,15 +108,64 @@ function positionStrikePills(el) {
   });
 }
 
+function positionEventLabels(el) {
+  var wrap = el.parentElement;
+  wrap.querySelectorAll('.event-label').forEach(function(l) { l.remove(); });
+  if (!el.dataset.events || !el._fullLayout) return;
+
+  var ly      = el._fullLayout;
+  var xrange  = ly.xaxis.range;
+  var plotLeft = ly._size.l;
+  var plotW    = ly._size.w;
+  var plotTop  = ly._size.t;
+
+  // Plotly may store date-axis range values as strings ("2025-06-15 00:00:00")
+  // or as numbers (ms since epoch). Normalize to epoch ms before arithmetic.
+  function toMs(v) {
+    if (typeof v === 'number') return v;
+    return new Date(String(v).replace(' ', 'T')).getTime();
+  }
+  var xMin = toMs(xrange[0]);
+  var xMax = toMs(xrange[1]);
+
+  JSON.parse(el.dataset.events).forEach(function(evt) {
+    var ms   = new Date(evt.d).getTime();
+    var frac = (ms - xMin) / (xMax - xMin);
+    if (frac < -0.01 || frac > 1.01) return;  // off-screen, skip
+    var xPx  = plotLeft + plotW * frac;
+
+    var lbl = document.createElement('div');
+    lbl.className = 'event-label';
+    lbl.textContent = evt.l;
+    // transform-origin: left top keeps the anchor at (xPx, plotTop-4).
+    // rotate(-90deg) pivots the text upward from that point so it reads
+    // bottom-to-top inside the chart's top margin.
+    lbl.style.cssText = [
+      'position:absolute',
+      'left:' + (xPx - 4) + 'px',
+      'top:' + (plotTop - 4) + 'px',
+      'transform:rotate(-90deg)',
+      'transform-origin:left top',
+      'font-size:7px',
+      'color:#AAAAAA',
+      'font-family:Inter,sans-serif',
+      'white-space:nowrap',
+      'pointer-events:none',
+      'line-height:1',
+    ].join(';');
+    wrap.appendChild(lbl);
+  });
+}
+
 document.addEventListener('htmx:afterSwap', function(e) {
   e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
     try {
       var fig = JSON.parse(el.dataset.plotly);
       Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
       positionStrikePills(el);
-      // Re-position pills after any zoom / pan / autorange relayout
-      el.on('plotly_relayout', function() { positionStrikePills(el); });
-      el.on('plotly_afterplot', function() { positionStrikePills(el); });
+      positionEventLabels(el);
+      el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
+      el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
     } catch (err) {
       console.error('Plotly render failed', err, el);
     }
