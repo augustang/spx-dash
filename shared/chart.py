@@ -6,7 +6,13 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
-# ── Axis / hover style shared by both chart functions ─────────────────────────
+# ── Shared hover / axis styles ────────────────────────────────────────────────
+_HOVERLABEL = dict(
+    bgcolor="rgba(255,255,255,0.92)",
+    bordercolor="rgba(0,0,0,0)",
+    font=dict(color="#1E1E1E", family="Inter, sans-serif", size=12),
+)
+
 _AXIS_STYLE = dict(
     showgrid=True, gridcolor="#F0F0F0",
     tickfont=dict(color="#808080", size=8),
@@ -119,11 +125,7 @@ def create_long_chart(
         hovermode="x",
         hoverdistance=50,
         spikedistance=50,
-        hoverlabel=dict(
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="rgba(0,0,0,0)",
-            font=dict(color="#1E1E1E", size=11),
-        ),
+        hoverlabel=_HOVERLABEL,
         xaxis=dict(
             **_AXIS_STYLE,
             rangeslider=dict(visible=False),
@@ -311,11 +313,7 @@ def create_spx_chart(
         hovermode="x" if ohlc_df is not None else "x unified",
         hoverdistance=100 if ohlc_df is not None else -1,
         spikedistance=100 if ohlc_df is not None else -1,
-        hoverlabel=dict(
-            bgcolor="rgba(255, 255, 255, 0.85)",
-            bordercolor="rgba(0, 0, 0, 0)",
-            font=dict(color="#1E1E1E")
-        ),
+        hoverlabel=_HOVERLABEL,
         xaxis=dict(
             showgrid=True, gridcolor="#F0F0F0",
             tickfont=dict(color="#808080", size=8),

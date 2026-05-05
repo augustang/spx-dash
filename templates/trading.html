@@ -148,25 +148,7 @@
 </div><!-- /page-grid -->
 
 <script>
-// ── Stepper buttons ──────────────────────────────────────────────────────────
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('[data-field][data-dir]');
-  if (!btn) return;
-  const fieldId = btn.dataset.field;
-  const dir = parseFloat(btn.dataset.dir);
-  const input = document.getElementById(fieldId);
-  if (!input) return;
-  const val = parseFloat(input.value) || 0;
-  const newVal = Math.max(0, Math.round((val + dir) * 100) / 100);
-  // Use 2dp for entry/close (where step < 1), integer-style display for the rest
-  input.value = (Math.abs(dir) < 1) ? newVal.toFixed(2) : String(Math.round(newVal));
-  // If this stepper belongs to the inputs form, propagate _triggered name
-  const triggeredField = document.getElementById('triggered-field');
-  if (triggeredField && btn.dataset.name) {
-    triggeredField.value = btn.dataset.name;
-  }
-  input.dispatchEvent(new Event('change', { bubbles: true }));
-});
+// ── Pill radio active state ──────────────────────────────────────────────────
 
 // ── Pill radio active state ──────────────────────────────────────────────────
 document.addEventListener('change', function(e) {

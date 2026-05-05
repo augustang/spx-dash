@@ -1,6 +1,5 @@
 {% macro date_input() %}
 <div style="margin-bottom:20px">
-  <p class="field-label" style="margin-bottom:6px">Day to study</p>
   <input type="date" name="date" id="intraday-date"
          value="{{ date_str }}"
          min="{{ min_date }}"
@@ -15,6 +14,29 @@
          hx-target="#intraday-content"
          hx-swap="innerHTML" />
 </div>
+<script>
+(function() {
+  var el = document.getElementById('intraday-date');
+  if (!el) return;
+  el.addEventListener('paste', function(e) {
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text').trim();
+    var d = null;
+    // YYYY-MM-DD
+    var m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) d = new Date(+m[1], +m[2]-1, +m[3]);
+    // MM/DD/YYYY or M/D/YYYY
+    if (!d) { m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) d = new Date(+m[3], +m[1]-1, +m[2]); }
+    // DD-Mon-YYYY or Mon DD, YYYY
+    if (!d) d = new Date(text);
+    if (d && !isNaN(d)) {
+      var val = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      el.value = val;
+      el.dispatchEvent(new Event('change'));
+    }
+  });
+})();
+</script>
 {% endmacro %}
 
 {% if error %}

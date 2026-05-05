@@ -10,6 +10,19 @@
     --text:         #1A1A1A;
     --muted:        #888888;
     --border:       #E8E8E8;
+
+    --shadow-light:
+        0px 4px   10px 0px rgba(0,0,0,0.08),
+        0px 18px  18px 0px rgba(0,0,0,0.07),
+        0px 40px  24px 0px rgba(0,0,0,0.04),
+        0px 71px  28px 0px rgba(0,0,0,0.01),
+        0px 110px 31px 0px rgba(0,0,0,0.00);
+    --shadow-dark:
+        0px 4px   10px 0px rgba(0,0,0,0.15),
+        0px 18px  18px 0px rgba(0,0,0,0.13),
+        0px 40px  24px 0px rgba(0,0,0,0.08),
+        0px 71px  28px 0px rgba(0,0,0,0.02),
+        0px 110px 31px 0px rgba(0,0,0,0.00);
 }
 
 /* ── Reset / base ─────────────────────────────────────────────────────────── */
@@ -37,6 +50,10 @@ input[type="checkbox"],
 input[type="radio"],
 input[type="range"] {
     accent-color: var(--purple);
+}
+
+input[type="date"] {
+    accent-color: var(--text);
 }
 
 /* ── Hide number spinners ─────────────────────────────────────────────────── */
@@ -291,10 +308,10 @@ main {
 }
 .toggle-wrap input[type="checkbox"] { display: none; }
 .toggle-track {
-    width: 19px;
-    height: 11px;
+    width: 28px;
+    height: 16px;
     background: rgba(0,0,0,0.12);
-    border-radius: 6px;
+    border-radius: 8px;
     position: relative;
     transition: background 0.18s;
     flex-shrink: 0;
@@ -302,19 +319,19 @@ main {
 .toggle-track::after {
     content: '';
     position: absolute;
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     background: #fff;
     border-radius: 50%;
-    top: 1.5px;
-    left: 1.5px;
+    top: 2px;
+    left: 2px;
     transition: transform 0.18s;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .toggle-wrap input:checked ~ .toggle-track { background: var(--text); }
-.toggle-wrap input:checked ~ .toggle-track::after { transform: translateX(8px); }
+.toggle-wrap input:checked ~ .toggle-track::after { transform: translateX(12px); }
 .toggle-label {
-    font-size: 10px;
+    font-size: 12px;
     color: #808080;
 }
 
@@ -326,8 +343,8 @@ main {
     flex-wrap: wrap;
 }
 
-/* ── Select / dropdown (native) ───────────────────────────────────────────── */
-select.figma-dropdown {
+/* ── Select / input shared base ───────────────────────────────────────────── */
+.figma-dropdown {
     width: 100%;
     background: var(--bg);
     border: none;
@@ -339,6 +356,8 @@ select.figma-dropdown {
     color: var(--text);
     cursor: pointer;
     font-family: inherit;
+}
+select.figma-dropdown {
     appearance: none;
     background-image: url('/static/icons/Arrow/Chevron_Down.svg');
     background-repeat: no-repeat;
@@ -398,40 +417,39 @@ select.figma-dropdown {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    letter-spacing: -0.04em;
 }
 .table th {
-    font-weight: 600;
-    color: #555;
+    font-weight: 400;
+    color: var(--text);
     font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    border-color: #F0F0F0;
-    padding: 6px 8px;
-    background: #FAFAFA;
-    border-bottom: 1px solid #F0F0F0;
+    letter-spacing: -0.02em;
+    padding: 6px 8px 10px;
+    border-bottom: 1px solid var(--bg);
     text-align: left;
 }
 .table td {
-    padding: 5px 8px;
-    border-bottom: 1px solid #F0F0F0;
+    padding: 9px 8px;
     vertical-align: middle;
 }
-.table .spread-row:hover td { background: #F9F9F9; }
-.table .spread-highlight td { background: #E4FF7A !important; font-weight: 600; }
-.table .spread-row.selected td { background: #EEF0FF !important; }
+.table tr + tr td { border-top: 1px solid var(--bg); }
+.table td:first-child,
+.table th:first-child { padding-left: 0; }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 .btn-outline {
     background: none;
     border: 1px solid #DDD;
     border-radius: 6px;
-    padding: 5px 12px;
+    padding: 0 12px;
+    height: 32px;
     font-size: 12px;
     cursor: pointer;
     font-family: inherit;
     color: var(--text);
 }
-.btn-outline:hover { background: #F0F0F0; }
+.btn-outline { transition: border-color 0.15s; }
+.btn-outline:hover { background: none; border-color: var(--text); }
 
 .btn-text {
     background: none;
@@ -501,6 +519,38 @@ select.figma-dropdown {
 }
 .bm-note-wrap:hover .bm-note-tip { display: block; }
 
+/* ── Date pill hover ──────────────────────────────────────────────────────── */
+input[type="text"][readonly][data-copy]:hover { background: #E4E5EA !important; }
+
+
+/* ── Custom toast notification ────────────────────────────────────────────── */
+/* Plotly's notifier is hidden via JS; display:none is set inline with !important */
+
+@keyframes plotly-toast {
+    0%   { opacity: 0; transform: translateY(12px); }
+    10%  { opacity: 1; transform: translateY(0);    }
+    82%  { opacity: 1; transform: translateY(0);    }
+    100% { opacity: 0; transform: translateY(12px); }
+}
+
+.spx-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    translate: -50% 0;
+    z-index: 9999;
+    background: var(--white);
+    border-radius: 10px;
+    box-shadow: var(--shadow-dark);
+    padding: 12px 20px;
+    font-family: Inter, sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text);
+    pointer-events: none;
+    white-space: nowrap;
+    animation: plotly-toast 3.2s ease forwards;
+}
 
 /* ── Loading placeholder ──────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -542,4 +592,46 @@ details[open] summary { background: #FAFAFA; }
 details > :not(summary) {
     font-size: 13px;
     padding: 10px 14px 14px;
+}
+
+/* ── Flatpickr date picker popup ──────────────────────────────────────────── */
+.flatpickr-calendar {
+    border: none !important;
+    border-radius: 12px;
+    box-shadow: var(--shadow-dark);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+}
+
+/* remove the pointer notch that points back at the input */
+.flatpickr-calendar.arrowTop::before,
+.flatpickr-calendar.arrowTop::after,
+.flatpickr-calendar.arrowBottom::before,
+.flatpickr-calendar.arrowBottom::after { display: none; }
+
+/* selected day: blue → black */
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange,
+.flatpickr-day.startRange:hover,
+.flatpickr-day.endRange,
+.flatpickr-day.endRange:hover {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--white);
+}
+
+/* "today" indicator: blue → black */
+.flatpickr-day.today { border-bottom-color: var(--text); }
+.flatpickr-day.today:hover {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--white);
+}
+
+/* navigation arrows: half size (default SVG is ~17 px) */
+.flatpickr-prev-month svg,
+.flatpickr-next-month svg {
+    width: 9px;
+    height: 9px;
 }

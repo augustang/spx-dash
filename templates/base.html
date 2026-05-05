@@ -157,18 +157,91 @@ function positionEventLabels(el) {
   });
 }
 
+// ── Stepper buttons (+/- icons on number fields) ─────────────────────────────
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-field][data-dir]');
+  if (!btn) return;
+  var input = document.getElementById(btn.dataset.field);
+  if (!input) return;
+  var dir = parseFloat(btn.dataset.dir);
+  var floor = btn.dataset.min !== undefined ? parseFloat(btn.dataset.min) : 0;
+  var val = parseFloat(input.value) || 0;
+  var newVal = Math.max(floor, Math.round((val + dir) * 100) / 100);
+  input.value = (Math.abs(dir) < 1) ? newVal.toFixed(2) : String(Math.round(newVal));
+  var triggered = document.getElementById('triggered-field');
+  if (triggered && btn.dataset.name) triggered.value = btn.dataset.name;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+});
+
+// Hide Plotly's notifier and show our own custom toast instead.
+(function() {
+  new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(node) {
+        if (node.nodeType !== 1) return;
+        var n = node.classList.contains('plotly-notifier') ? node
+              : node.querySelector && node.querySelector('.plotly-notifier');
+        if (!n || n._toastHandled) return;
+        n._toastHandled = true;
+
+        // First add = Plotly is showing it for a zoom-in; hide it and show our toast
+        n.style.setProperty('display', 'none', 'important');
+        showZoomToast();
+
+        // Each subsequent zoom-in Plotly reuses the same element and un-hides it
+        var blocking = false;
+        new MutationObserver(function() {
+          if (blocking) return;
+          if (n.style.display !== 'none') {
+            blocking = true;
+            n.style.setProperty('display', 'none', 'important');
+            blocking = false;
+            showZoomToast();
+          }
+        }).observe(n, { attributes: true, attributeFilter: ['style'] });
+      });
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+})();
+
+// Show a custom centered toast. Replaces Plotly's built-in notifier (hidden via CSS).
+var _toastTimer = null;
+function showToast(msg) {
+  var existing = document.querySelector('.spx-toast');
+  if (existing) existing.parentNode.removeChild(existing);
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  var toast = document.createElement('div');
+  toast.className = 'spx-toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  _toastTimer = setTimeout(function() {
+    if (toast.parentNode) toast.parentNode.removeChild(toast);
+    _toastTimer = null;
+  }, 3200);
+}
+function showZoomToast() { showToast('Double-click to zoom back out'); }
+
 document.addEventListener('htmx:afterSwap', function(e) {
   e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
-    try {
-      var fig = JSON.parse(el.dataset.plotly);
-      Plotly.react(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
-      positionStrikePills(el);
-      positionEventLabels(el);
-      el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
-      el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
-    } catch (err) {
-      console.error('Plotly render failed', err, el);
-    }
+    // Defer to next frame so the browser has finished laying out the new DOM
+    // before Plotly measures container dimensions and binds its hover layer.
+    requestAnimationFrame(function() {
+      try {
+        var fig = JSON.parse(el.dataset.plotly);
+        // Use newPlot (not react) for freshly-swapped elements — react on a
+        // brand-new element can leave the hover/event layer uninitialised.
+        Plotly.newPlot(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
+        positionStrikePills(el);
+        positionEventLabels(el);
+        el.on('plotly_relayout', function() {
+          positionStrikePills(el);
+          positionEventLabels(el);
+        });
+        el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
+      } catch (err) {
+        console.error('Plotly render failed', err, el);
+      }
+    });
   });
 });
 </script>

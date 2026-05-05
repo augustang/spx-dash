@@ -1,9 +1,10 @@
 {% macro pill(d) %}
-<input type="text" readonly value="{{ d.strftime('%m/%d/%Y') }}"
-       onclick="this.select()"
+<input type="text" readonly value="{{ d.strftime('%b %-d') }}"
+       data-copy="{{ d.strftime('%m/%d/%Y') }}"
+       onclick="navigator.clipboard.writeText(this.dataset.copy).then(function(){showToast('Copied date to clipboard')});"
        style="display:block;font-size:12px;color:#444;background:#F1F2F6;
               border:none;outline:none;padding:3px 10px;border-radius:6px;
-              margin-bottom:4px;width:94px;cursor:default;font-family:inherit;" />
+              margin-bottom:4px;width:94px;cursor:pointer;font-family:inherit;" />
 {% endmacro %}
 
 {% macro pct_spans(oc, ol) %}
@@ -34,12 +35,12 @@
     {% set _ = by_year[d.year].append((d, label)) %}
   {% endfor %}
   <div style="display:flex;flex-wrap:wrap;gap:24px">
-    {% for yr in by_year.keys() | sort(reverse=True) %}
-    <div style="min-width:140px">
+    {% for yr in all_years %}
+    <div style="min-width:120px">
       <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
-      {% for d, lbl in by_year[yr] | sort %}
+      {% for d, lbl in (by_year.get(yr) or []) | sort %}
       <div style="margin-bottom:22px">
-        <span style="font-size:12px;color:#444;display:block;margin-bottom:0px">{{ lbl }}</span>
+        <span style="font-size:12px;color:#444;display:block;margin-bottom:2px">{{ lbl }}</span>
         <div style="display:flex;gap:8px;margin-bottom:6px">
           {% set oc = oc_pct.get(d) %}
           {% set ol = ol_pct.get(d) %}

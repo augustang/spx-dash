@@ -8,12 +8,23 @@ import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
+import pytz
 from flask import Blueprint, render_template, request, session, jsonify, make_response
 
 import schwab_client
 from shared.cache import cache
 from shared.chart import create_spx_chart
 from shared.events import get_financial_events
+
+_ET = pytz.timezone("America/New_York")
+
+def _market_is_open() -> bool:
+    """True only during regular NYSE session (Mon–Fri 9:30–16:00 ET)."""
+    now = datetime.datetime.now(_ET)
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    return datetime.time(9, 30) <= t < datetime.time(16, 0)
 
 trading_bp = Blueprint('trading', __name__)
 
@@ -45,19 +56,29 @@ def get_spx_metrics():
     try:
         q = schwab_client.fetch_live_quote("$SPX")
         if q and q.get('lastPrice'):
-            # Outside market hours, Schwab returns openPrice=0 (no print yet).
-            # The naive (pts / openPrice) below would ZeroDivisionError into
-            # the hardcoded fallback, which is what was making the spreads
-            # loop target strikes way out of range (e.g. ~6815 vs a chain
-            # spanning 7010-7460), producing zero usable rows. Substitute
-            # closePrice when openPrice is 0 so downstream gap/change math
-            # all collapses to 0 cleanly instead of corrupting spx_last.
-            spx_open = q['openPrice'] or q['closePrice']
-            pts = q['netChange'] or 0.0
-            pct = (pts / spx_open * 100) if spx_open else 0.0
+            spx_prior = q['closePrice']  # always previous session close from Schwab
+
+            if _market_is_open():
+                # Live session: use real-time last and today's open
+                spx_open = q['openPrice'] or spx_prior
+                spx_last = q['lastPrice']
+            else:
+                # Outside regular hours: derive open/close from the regular session
+                # intraday bars (already filtered to 09:30–16:00) so we never show
+                # extended-hours prices on the metrics card.
+                df_intra = get_spx_history_intraday("1d")
+                if not df_intra.empty:
+                    spx_open = float(df_intra['Open'].iloc[0])
+                    spx_last = float(df_intra['Close'].iloc[-1])
+                else:
+                    spx_open = q['openPrice'] or spx_prior
+                    spx_last = q['lastPrice']
+
+            pts = spx_last - spx_prior
+            pct = (pts / spx_prior * 100) if spx_prior else 0.0
             arrow = "↑" if pts >= 0 else "↓"
             return (
-                q['lastPrice'], spx_open, q['closePrice'],
+                spx_last, spx_open, spx_prior,
                 f"{arrow} {abs(pts):.2f} pts ({abs(pct):.2f}%)"
             )
     except Exception:
@@ -84,6 +105,7 @@ def get_spx_history_intraday(period="1d"):
         target_dates = unique_dates[day_map.get(period, -1):]
         df = df[df['datetime'].dt.date.isin(target_dates)]
         df.set_index('datetime', inplace=True)
+        df = df.between_time('09:30', '16:00')
         df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
         return df
     return pd.DataFrame()

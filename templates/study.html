@@ -63,11 +63,12 @@
   </div>
 
   <!-- 3. Event comparison -->
-  <div class="section-label">Event comparison</div>
+  <!-- 3. Conditional comparison -->
+  <div class="section-label">Conditional comparison</div>
   <div class="card mb-4">
     <div class="card-body">
-      <div id="cmp-section"
-           hx-get="/api/study/cmp"
+      <div id="cc-section"
+           hx-get="/api/study/cc"
            hx-trigger="load"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:100px">Loading…</div>
@@ -75,12 +76,12 @@
     </div>
   </div>
 
-  <!-- 4. Conditional comparison -->
-  <div class="section-label">Conditional comparison</div>
+  <!-- 4. Event comparison -->
+  <div class="section-label">Event comparison</div>
   <div class="card mb-4">
     <div class="card-body">
-      <div id="cc-section"
-           hx-get="/api/study/cc"
+      <div id="cmp-section"
+           hx-get="/api/study/cmp"
            hx-trigger="load"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:100px">Loading…</div>
@@ -145,6 +146,15 @@ document.addEventListener('change', function(e) {
     if (!group) return;
     group.querySelectorAll('.pill-label').forEach(l => l.classList.remove('active'));
     e.target.closest('.pill-label').classList.add('active');
+  }
+});
+
+// Show a loading placeholder in the long-term chart container as soon as
+// any HTMX request targets it (range change, events toggle, line toggle).
+document.body.addEventListener('htmx:beforeRequest', function(e) {
+  var target = e.detail.target;
+  if (target && target.id === 'long-chart-container') {
+    target.innerHTML = '<div class="loading-placeholder" style="height:500px">Loading\u2026</div>';
   }
 });
 </script>

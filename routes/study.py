@@ -5,10 +5,23 @@ import datetime
 
 
 def _most_recent_trading_day() -> datetime.date:
-    """Return the most recent Mon–Fri (walks back through weekends)."""
-    d = datetime.date.today()
-    while d.weekday() >= 5:  # 5 = Sat, 6 = Sun
+    """Return the most recent weekday whose session has fully closed.
+
+    If today is a weekday but the market hasn't closed yet (before 4 PM ET),
+    we step back to the previous trading day so the explorer doesn't open on
+    a date with no data.
+    """
+    import pytz
+    now_et = datetime.datetime.now(pytz.timezone("America/New_York"))
+    d = now_et.date()
+    # Walk back past weekends
+    while d.weekday() >= 5:
         d -= datetime.timedelta(days=1)
+    # If today is a weekday but before market close, use the previous trading day
+    if d == now_et.date() and now_et.time() < datetime.time(16, 0):
+        d -= datetime.timedelta(days=1)
+        while d.weekday() >= 5:
+            d -= datetime.timedelta(days=1)
     return d
 import html
 import json
@@ -21,7 +34,7 @@ from flask import Blueprint, render_template, request, session
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart, create_long_chart
+from shared.chart import create_spx_chart, create_long_chart, _HOVERLABEL
 from shared.events import FOMC_DATES, get_financial_events
 
 study_bp = Blueprint('study', __name__)
@@ -53,7 +66,7 @@ _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
                     "#FF3D54", "#F5A623", "#4CAF50", "#888888"]
-_CMP_ENTRY_TYPES = ["FOMC", "OPEX", "VIX Exp", "Specific date"]
+_CMP_ENTRY_TYPES = ["FOMC", "OPEX", "VIX Exp", "Black Swan", "Specific date"]
 _CMP_OFFSET_OPTS = ["-3 days", "-2 days", "-1 day", "Day of", "+1 day", "+2 days"]
 _CMP_OFFSET_VALS = {"-3 days": -3, "-2 days": -2, "-1 day": -1, "Day of": 0, "+1 day": 1, "+2 days": 2}
 _CMP_RANGE_OPTS  = ["3M", "6M", "1Y", "2Y", "All"]
@@ -88,7 +101,7 @@ _DEFAULT_CMP_STORE = {
                  "date": (datetime.date.today() - datetime.timedelta(days=1)).isoformat(),
                  "enabled": True}],
 }
-_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": []}
+_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All"}
 
 
 def _get_cmp_store() -> dict:
@@ -235,6 +248,7 @@ def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
             if not df.empty:
                 df.set_index('datetime', inplace=True)
                 df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+                df = df.between_time('09:30', '16:00')
                 _append_to_archive(df)
                 return df
     return pd.DataFrame()
@@ -344,14 +358,15 @@ def _build_header_ctx():
 
 def _chart_html(div_id: str, fig: go.Figure, evt_payload=None) -> str:
     fig_json = html.escape(fig.to_json(), quote=True)
+    h = fig.layout.height or 400
     evt_attr = (
         f' data-events="{html.escape(json.dumps(evt_payload), quote=True)}"'
         if evt_payload else ''
     )
     return (
-        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:100%">'
+        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:{h}px">'
         f'<div id="{div_id}" data-plotly="{fig_json}"{evt_attr} '
-        f'style="width:100%;height:100%"></div>'
+        f'style="width:100%;height:{h}px"></div>'
         f'</div>'
     )
 
@@ -375,13 +390,17 @@ def study():
 
 # ── Section 1: Long-term chart ───────────────────────────────────────────────
 
-@study_bp.route('/api/study/long-chart')
-def api_long_chart():
-    selected_range = request.args.get('range', '1Y')
-    show_events    = bool(request.args.get('show_events'))
-    show_line      = bool(request.args.get('show_line'))
-    range_params   = {"1Y": 1, "2Y": 2, "5Y": 5, "10Y": 10, "Max": None}
-    years = range_params.get(selected_range, 1)
+@cache.memoize(timeout=3600)
+def _build_long_chart_html(selected_range: str, show_events: bool, show_line: bool) -> str:
+    """Build and serialize the long-term chart HTML.
+
+    Cached for 1 hour — the 20 possible (range × events × line) combinations
+    are all warm after first load, making subsequent visits near-instant.
+    The underlying get_spx_daily() data cache (86400s) is a separate layer;
+    this cache avoids the expensive Plotly figure-build + to_json() each time.
+    """
+    range_params = {"1Y": 1, "2Y": 2, "5Y": 5, "10Y": 10, "Max": None}
+    years   = range_params.get(selected_range, 1)
     df_long = get_spx_daily(years)
     if df_long.empty:
         return _chart_html('study-long-chart', go.Figure(), evt_payload=None)
@@ -401,6 +420,14 @@ def api_long_chart():
         events=events, chart_height=500, ohlc_df=ohlc_df,
     )
     return _chart_html('study-long-chart', fig, evt_payload=evt_payload)
+
+
+@study_bp.route('/api/study/long-chart')
+def api_long_chart():
+    selected_range = request.args.get('range', '1Y')
+    show_events    = bool(request.args.get('show_events'))
+    show_line      = bool(request.args.get('show_line'))
+    return _build_long_chart_html(selected_range, show_events, show_line)
 
 
 # ── Section 2: Intraday explorer ─────────────────────────────────────────────
@@ -519,6 +546,7 @@ def api_cmp_update():
         store["gap"]   = request.form.get('gap',   store["gap"])
 
     _save_cmp_store(store)
+    n_badge_html, charts_html = _build_cmp_charts_html(store)
     return render_template('partials/cmp_section.html',
         store=store,
         cmp_colors=_CMP_COLORS,
@@ -529,13 +557,15 @@ def api_cmp_update():
         today=datetime.date.today().isoformat(),
         min_date=(_FRD_MIN_DATE if os.path.exists(_FRD_5MIN_PATH)
                   else (datetime.date.today() - datetime.timedelta(days=MINUTE_HISTORY_DAYS))).isoformat(),
-        charts_html=_build_cmp_charts_html(store),
+        n_badge_html=n_badge_html,
+        charts_html=charts_html,
     )
 
 
 @study_bp.route('/api/study/cmp')
 def api_cmp_get():
     store = _get_cmp_store()
+    n_badge_html, charts_html = _build_cmp_charts_html(store)
     return render_template('partials/cmp_section.html',
         store=store,
         cmp_colors=_CMP_COLORS,
@@ -546,7 +576,8 @@ def api_cmp_get():
         today=datetime.date.today().isoformat(),
         min_date=(_FRD_MIN_DATE if os.path.exists(_FRD_5MIN_PATH)
                   else (datetime.date.today() - datetime.timedelta(days=MINUTE_HISTORY_DAYS))).isoformat(),
-        charts_html=_build_cmp_charts_html(store),
+        n_badge_html=n_badge_html,
+        charts_html=charts_html,
     )
 
 
@@ -567,6 +598,8 @@ def _cmp_resolve_entry(entry, cmp_daily, td_idx, gap_map):
         raw = sorted(d for d in FOMC_DATES if cutoff <= d <= today_)
     elif ctype == "OPEX":
         raw = sorted(d for d, lbl in all_ev if "OPEX" in lbl and d <= today_)
+    elif ctype == "Black Swan":
+        raw = sorted(d for d, _ in _NOTABLE_EVENTS if cutoff <= d <= today_)
     else:
         raw = sorted(d for d, lbl in all_ev if lbl == "VIX Exp" and d <= today_)
     offset_val = _CMP_OFFSET_VALS.get(entry.get("offset", "Day of"), 0)
@@ -608,6 +641,7 @@ def _build_cmp_charts_html(store) -> str:
     _ref = datetime.date(2000, 1, 3)
     all_entries = []
     legend_items = []
+    n_badge_html = ""
     for i, entry in enumerate(store.get("entries", [])):
         if not entry.get("enabled", True):
             continue
@@ -638,17 +672,19 @@ def _build_cmp_charts_html(store) -> str:
             h_std  = eod_s.std()
             h_n    = len(eod_s)
             if h_n < 30:
-                hbg, hfg = "#FF8C0020", "#CC7000"
+                hbg = "#FFA743"
             elif h_n < 75:
-                hbg, hfg = "#F5C51820", "#A08500"
+                hbg = "#ecff8b"
             else:
-                hbg, hfg = "#11F18520", "#0AA855"
+                hbg = "#13ff98"
             hist_fig = _build_histogram_figure(eod_s)
-            hist_html = (
+            n_badge_html = (
                 f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
-                f'background:{hbg};border:1px solid {hfg}44;font-size:12px;font-weight:600;'
-                f'color:{hfg};margin-bottom:10px;">N = {h_n}</div>'
-                + _stat_pills_html(h_mean, h_med, h_ppos, h_std)
+                f'background:{hbg};font-size:12px;font-weight:400;'
+                f'color:#1A1A1A;">N = {h_n}</div>'
+            )
+            hist_html = (
+                _stat_pills_html(h_mean, h_med, h_ppos, h_std)
                 + _chart_html('cmp-histogram-chart', hist_fig)
             )
 
@@ -663,9 +699,12 @@ def _build_cmp_charts_html(store) -> str:
             f'</span>'
             for lc, ll, ln in legend_items
         )
-        leg_html = f'<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;">{items}</div>'
+        leg_html = f'<div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:24px;margin-bottom:8px;">{items}</div>'
 
     # Overlay chart
+    single_entry = len(all_entries) == 1
+    if single_entry:
+        leg_html = ""  # hide legend when using EOD color coding
     cmp_fig = go.Figure()
     for cmp_color, cmp_lbl, entry_dates in all_entries:
         for cd in entry_dates:
@@ -680,31 +719,41 @@ def _build_cmp_charts_html(store) -> str:
             times = [datetime.datetime.combine(_ref, ts.time()) for ts in cdf.index]
             op = float(cdf["Open"].iloc[0])
             pct = ((cdf["Close"] / op - 1) * 100).round(2)
+            if single_entry:
+                cd_ts = pd.Timestamp(cd)
+                eod_val = float((cmp_daily.loc[cd_ts, "Close"] - cmp_daily.loc[cd_ts, "Open"]) / cmp_daily.loc[cd_ts, "Open"] * 100) if cd_ts in cmp_daily.index else 0
+                line_color = "#11F185" if eod_val >= 0 else "#FF3D54"
+                trace_hoverlabel = dict(font=dict(color="#1E1E1E" if eod_val >= 0 else "white"))
+            else:
+                line_color = cmp_color
+                trace_hoverlabel = {}
             cmp_fig.add_trace(go.Scatter(
                 x=times, y=pct, mode="lines",
                 legendgroup=cmp_lbl, showlegend=False,
-                line=dict(color=cmp_color, width=0.9), opacity=0.5,
+                line=dict(color=line_color, width=0.9), opacity=0.5,
+                hoverlabel=trace_hoverlabel if trace_hoverlabel else None,
                 hovertemplate=f'{cd.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
             ))
     cmp_fig.add_hline(y=0, line_dash="dot", line_color="#B2B2B2", line_width=1)
     cmp_fig.update_layout(
         font=dict(family="Inter, sans-serif"),
-        dragmode="zoom", uirevision="constant", height=560,
-        margin=dict(l=60, r=20, t=10, b=30),
-        plot_bgcolor="white", paper_bgcolor="white", hovermode="x unified",
-        hoverlabel=dict(bgcolor="rgba(255,255,255,0.85)", bordercolor="rgba(0,0,0,0)", font=dict(color="#1E1E1E")),
+        dragmode="zoom", height=560,
+        margin=dict(l=48, r=0, t=10, b=30),
+        plot_bgcolor="white", paper_bgcolor="white", hovermode="closest",
+        hoverlabel=dict(bordercolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
         xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M", hoverformat="%H:%M",
+                   tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                   ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
                    range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
                           datetime.datetime.combine(_ref, datetime.time(16, 0))],
-                   showspikes=True, spikemode="across", spikesnap="cursor",
-                   spikedash="1, 3", spikecolor="#B2B2B2", spikethickness=1,
                    rangeslider=dict(visible=False)),
         yaxis=dict(automargin=False, showgrid=True, gridcolor="#F0F0F0", side="left",
-                   title=dict(text="% from open", font=dict(size=10, color="#666")),
-                   ticksuffix="%", showspikes=True, spikemode="across", spikesnap="cursor",
-                   spikedash="1, 3", spikecolor="#B2B2B2", spikethickness=1),
+                   tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                   ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                   title=dict(text="% from open", font=dict(family="Inter, sans-serif", size=10, color="#666")),
+                   ticksuffix="%"),
     )
-    return hist_html + leg_html + _chart_html('cmp-overlay-chart', cmp_fig)
+    return n_badge_html, hist_html + leg_html + f'<div style="margin-top:24px">' + _chart_html('cmp-overlay-chart', cmp_fig) + '</div>'
 
 
 # ── Section 4: Conditional comparison ────────────────────────────────────────
@@ -719,7 +768,7 @@ def api_cc_update():
         store["ids"].append(cid)
         store["entries"].append({
             "id": cid, "type": _CC_COND_TYPES[0], "enabled": True,
-            "time": "11:00", "pct_min": -1.0, "pct_max": -0.1,
+            "time": "11:00", "pct_min": 0.2, "pct_max": 0.4,
             "event": "VIX Exp", "days_min": -3, "days_max": 3,
             "gap_min": -1.0, "gap_max": 1.0,
             "dow": list(range(5)), "months": list(range(1, 13)),
@@ -772,7 +821,11 @@ def api_cc_update():
                         pass
                 else:
                     entry[field] = value
+    elif action == 'filter':
+        store["range"] = request.form.get('range', store.get("range", "All"))
+        store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
     _save_cc_store(store)
+    n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
         store=store,
         cond_types=_CC_COND_TYPES,
@@ -780,13 +833,17 @@ def api_cc_update():
         time_opts=_CC_TIME_OPTS,
         dow_labels=_CC_DOW_LABELS,
         mon_labels=_CC_MON_LABELS,
-        results_html=_build_cc_results_html(store),
+        range_opts=_CMP_RANGE_OPTS,
+        gap_opts=_CMP_GAP_OPTS,
+        n_badge_html=n_badge_html,
+        results_html=results_html,
     )
 
 
 @study_bp.route('/api/study/cc')
 def api_cc_get():
     store = _get_cc_store()
+    n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
         store=store,
         cond_types=_CC_COND_TYPES,
@@ -794,7 +851,10 @@ def api_cc_get():
         time_opts=_CC_TIME_OPTS,
         dow_labels=_CC_DOW_LABELS,
         mon_labels=_CC_MON_LABELS,
-        results_html=_build_cc_results_html(store),
+        range_opts=_CMP_RANGE_OPTS,
+        gap_opts=_CMP_GAP_OPTS,
+        n_badge_html=n_badge_html,
+        results_html=results_html,
     )
 
 
@@ -830,39 +890,50 @@ def _apply_cc_conditions(snap, store):
     return snap[mask]
 
 
-def _build_cc_results_html(store) -> str:
+def _build_cc_results_html(store) -> tuple:
     snap = _build_daily_snapshots()
     if snap.empty:
-        return '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
+        return "", '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
     if not store.get("ids"):
-        return '<p style="font-size:13px;color:#aaa;padding:2px 0 8px">Add a condition above to filter historical days.</p>'
+        return "", '<p style="font-size:13px;color:#aaa;padding:2px 0 8px">Add a condition above to filter historical days.</p>'
 
     matched = _apply_cc_conditions(snap, store)
+    # Apply time range filter
+    rng_days = _CMP_RANGE_DAYS.get(store.get("range", "All"))
+    if rng_days:
+        cutoff = pd.Timestamp(datetime.date.today() - datetime.timedelta(days=rng_days))
+        matched = matched[matched.index >= cutoff]
+    # Apply overnight gap filter
+    gap_filter = store.get("gap", "All")
+    if gap_filter == "Gap up ↑" and "gap_pct" in matched.columns:
+        matched = matched[matched["gap_pct"] > 0]
+    elif gap_filter == "Gap down ↓" and "gap_pct" in matched.columns:
+        matched = matched[matched["gap_pct"] < 0]
     n = len(matched)
     if n == 0:
-        bg, fg, msg = "#FF3D5420", "#FF3D54", "No matching days"
+        bg = "#ff4646"
     elif n < 30:
-        bg, fg, msg = "#FF8C0020", "#CC7000", f"N = {n}  ·  thin sample — interpret carefully"
+        bg = "#FFA743"
     elif n < 75:
-        bg, fg, msg = "#F5C51820", "#A08500", f"N = {n}  ·  moderate sample"
+        bg = "#ecff8b"
     else:
-        bg, fg, msg = "#11F18520", "#0AA855", f"N = {n}  ·  solid sample"
+        bg = "#13ff98"
 
-    badge = (f'<div style="display:inline-block;padding:5px 14px;border-radius:8px;'
-             f'background:{bg};border:1px solid {fg}44;font-size:13px;font-weight:600;'
-             f'color:{fg};margin-bottom:14px;">{msg}</div>')
+    n_badge_html = (f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
+                    f'background:{bg};font-size:12px;font-weight:400;'
+                    f'color:#1A1A1A;">N = {n}</div>')
     if n == 0:
-        return badge
+        return n_badge_html, ""
 
     eod = matched["eod_pct"].dropna()
     if eod.empty:
-        return badge
+        return n_badge_html, ""
 
     mean = eod.mean()
     med  = eod.median()
     ppos = (eod >= 0).mean() * 100
     std  = eod.std()
-    pills = badge + _stat_pills_html(mean, med, ppos, std)
+    pills = _stat_pills_html(mean, med, ppos, std, margin_top=24)
 
     hist_fig = _build_histogram_figure(eod)
     hist_html = _chart_html('cc-hist-chart', hist_fig)
@@ -888,27 +959,32 @@ def _build_cc_results_html(store) -> str:
                 x=ox, y=oy, mode="lines",
                 line=dict(color="#11F185" if ev >= 0 else "#FF3D54", width=0.8),
                 opacity=0.4, showlegend=False,
+                hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
                 hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
         ofig.update_layout(
             font=dict(family="Inter, sans-serif"),
-            height=400, margin=dict(l=60, r=20, t=16, b=30),
+            height=400, margin=dict(l=48, r=0, t=16, b=30),
             plot_bgcolor="white", paper_bgcolor="white", hovermode="closest",
+            hoverlabel=dict(bordercolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
             xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
+                       tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                       ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
                        range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
                               datetime.datetime.combine(_ref, datetime.time(16, 0))],
                        rangeslider=dict(visible=False)),
-            yaxis=dict(showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
-                       title=dict(text="% from open", font=dict(size=10, color="#888"))),
+            yaxis=dict(automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
+                       tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                       ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                       title=dict(text="% from open", font=dict(family="Inter, sans-serif", size=10, color="#888"))),
         )
         overlay_html = (
-            f'<p style="font-size:11px;color:#888;margin-top:8px">'
-            f'Showing {len(ov_dates)} most recent matching days  ·  '
-            f'green = positive EOD, red = negative EOD</p>'
+            f'<p style="font-size:11px;color:#888;margin-top:24px">'
+            f'{len(ov_dates)} most recent matching days</p>'
             + _chart_html('cc-overlay-chart', ofig)
         )
-    return pills + hist_html + overlay_html
+    return n_badge_html, pills + hist_html + overlay_html
 
 
 # ── Sections 5–8: Static sections ────────────────────────────────────────────
@@ -939,7 +1015,14 @@ def api_key_dates():
     for d, lbl in kd_events:
         key = "OPEX" if "OPEX" in lbl else lbl
         kd_grouped.setdefault(key, []).append(d)
-    return render_template('partials/key_dates.html', grouped=kd_grouped)
+    # Group each event type by year, sorted descending
+    kd_by_year: dict[str, dict[int, list[datetime.date]]] = {}
+    for key, dates in kd_grouped.items():
+        by_year: dict[int, list[datetime.date]] = {}
+        for d in sorted(dates, reverse=True):
+            by_year.setdefault(d.year, []).append(d)
+        kd_by_year[key] = by_year
+    return render_template('partials/key_dates.html', grouped=kd_grouped, by_year=kd_by_year)
 
 
 @study_bp.route('/api/study/notable-events')
@@ -953,8 +1036,10 @@ def api_notable_events():
                 d = ts.date()
                 oc_pct[d] = (row["Close"] - row["Open"]) / row["Open"] * 100
                 ol_pct[d] = (row["Low"]   - row["Open"]) / row["Open"] * 100
+    all_years = list(range(datetime.date.today().year, 2018, -1))
     return render_template('partials/notable_events.html',
-        notable_events=_NOTABLE_EVENTS, oc_pct=oc_pct, ol_pct=ol_pct)
+        notable_events=_NOTABLE_EVENTS, oc_pct=oc_pct, ol_pct=ol_pct,
+        all_years=all_years)
 
 
 @study_bp.route('/api/study/big-moves')
@@ -1000,7 +1085,7 @@ def _build_histogram_figure(eod_series: pd.Series) -> go.Figure:
     fig.add_trace(go.Bar(
         x=ctrs, y=cnts, marker_color=bclrs, marker_line_width=0,
         width=bsz * 0.88, customdata=bpcts,
-        hovertemplate="%{x:+.2f}%  →  %{y} days (%{customdata:.1f}%)<extra></extra>",
+        hovertemplate="%{y} days (%{customdata:.1f}%)<extra></extra>",
     ))
     fig.add_vline(x=0,    line_color="#C8C8C8", line_width=1, line_dash="dot")
     fig.add_vline(x=mean, line_color="#1A1A1A", line_width=1.5)
@@ -1013,27 +1098,32 @@ def _build_histogram_figure(eod_series: pd.Series) -> go.Figure:
                         xanchor="left", yanchor="bottom", font=dict(size=10, color="#888888"))
     fig.update_layout(
         font=dict(family="Inter, sans-serif"),
-        height=260, margin=dict(l=50, r=20, t=46, b=40),
+        height=260, margin=dict(l=0, r=0, t=46, b=40),
         plot_bgcolor="white", paper_bgcolor="white", bargap=0.06,
+        hovermode="x", hoverdistance=50,
+        hoverlabel=_HOVERLABEL,
         xaxis=dict(showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
-                   title=dict(text="EOD % from open", font=dict(size=11, color="#888"))),
+                   tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                   ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                   title=dict(text="EOD % from open", font=dict(family="Inter, sans-serif", size=11, color="#888"))),
         yaxis=dict(showgrid=True, gridcolor="#F0F0F0",
-                   title=dict(text="# of days", font=dict(size=11, color="#888"))),
+                   tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                   ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                   title=dict(text="# of days", font=dict(family="Inter, sans-serif", size=11, color="#888"))),
         showlegend=False,
     )
     return fig
 
 
-def _stat_pills_html(mean, med, ppos, std) -> str:
+def _stat_pills_html(mean, med, ppos, std, margin_top=24) -> str:
     def _pill(label, val, color="#444"):
-        return (f'<span style="display:inline-block;padding:4px 12px;border-radius:6px;'
-                f'background:#F1F2F6;font-size:12px;color:#555;margin:0 6px 6px 0;">'
+        return (f'<span style="font-size:12px;color:#555;margin-right:16px;">'
                 f'{label}: <b style="color:{color};">{val}</b></span>')
-    mc = "#11F185" if mean >= 0 else "#FF3D54"
-    dc = "#11F185" if med  >= 0 else "#FF3D54"
-    pc = "#11F185" if ppos >= 50 else "#FF3D54"
+    mc = "#00D679" if mean >= 0 else "#FF3D54"
+    dc = "#00D679" if med  >= 0 else "#FF3D54"
+    pc = "#00D679" if ppos >= 50 else "#FF3D54"
     return (
-        '<div style="margin-bottom:12px;">'
+        '<div style="margin-top:{margin_top}px;margin-bottom:12px;">'.format(margin_top=margin_top)
         + _pill("Mean EOD",   f'{"+" if mean >= 0 else ""}{mean:.2f}%', mc)
         + _pill("Median EOD", f'{"+" if med  >= 0 else ""}{med:.2f}%',  dc)
         + _pill("% Positive", f'{ppos:.0f}%',                           pc)

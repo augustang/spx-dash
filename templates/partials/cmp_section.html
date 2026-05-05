@@ -1,7 +1,7 @@
 <!-- Event comparison section — entire section re-rendered on any change -->
 <div>
   <!-- Add / Clear buttons -->
-  <div style="display:flex;gap:8px;margin-bottom:8px">
+  <div style="display:flex;gap:8px;align-items:center">
     <button class="btn-outline"
             hx-post="/api/study/cmp"
             hx-vals='{"action":"add"}'
@@ -12,22 +12,24 @@
             hx-vals='{"action":"clear"}'
             hx-target="#cmp-section"
             hx-swap="innerHTML">Clear all</button>
+    {% if n_badge_html %}
+    <div style="margin-left:auto">{{ n_badge_html | safe }}</div>
+    {% endif %}
   </div>
 
   <!-- Event rows -->
   {% for entry in store.entries %}
   {% set i = loop.index0 %}
   {% set color = cmp_colors[i % cmp_colors|length] %}
-  <hr style="border:none;border-top:1px solid #EBEBEB;margin:6px 0 4px" />
-  <div class="row-4col" style="align-items:flex-end;gap:12px;margin-bottom:4px">
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
+  <div class="row-4col" style="display:flex;align-items:flex-end;gap:12px">
     <!-- Type -->
     <div>
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
         <span style="width:8px;height:8px;border-radius:50%;background:{{ color }};display:inline-block"></span>
         <span style="font-size:11px;color:#999">Event type</span>
       </div>
-      <select style="font-size:12px;width:100%;background:#F1F2F6;border:none;border-radius:6px;
-                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+      <select class="figma-dropdown"
               hx-post="/api/study/cmp"
               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"type"}'
               hx-include="select"
@@ -42,9 +44,8 @@
     <!-- Offset or Date -->
     <div>
       {% if entry.type != "Specific date" %}
-      <p style="font-size:11px;color:#999;margin-bottom:2px">Offset</p>
-      <select style="font-size:12px;width:100%;background:#F1F2F6;border:none;border-radius:6px;
-                     padding:6px 10px;height:32px;font-family:inherit;cursor:pointer"
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Offset</p>
+      <select class="figma-dropdown"
               hx-post="/api/study/cmp"
               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"offset"}'
               hx-include="select"
@@ -56,10 +57,9 @@
         {% endfor %}
       </select>
       {% else %}
-      <p style="font-size:11px;color:#999;margin-bottom:2px">Date</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Date</p>
       <input type="date" value="{{ entry.date }}"
-             style="font-size:12px;background:#F1F2F6;border:none;border-radius:6px;
-                    padding:6px 10px;height:32px;font-family:inherit"
+             class="figma-dropdown"
              hx-post="/api/study/cmp"
              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"date"}'
              hx-trigger="change"
@@ -69,9 +69,9 @@
              name="value" />
       {% endif %}
     </div>
-    <!-- Enabled -->
-    <div>
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+    <!-- Enabled + Delete -->
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <label class="toggle-wrap">
         <input type="checkbox"
                {% if entry.enabled %}checked{% endif %}
                hx-post="/api/study/cmp"
@@ -79,26 +79,24 @@
                hx-trigger="change"
                hx-target="#cmp-section"
                hx-swap="innerHTML" />
-        On
+        <span class="toggle-track"></span>
+        <span class="toggle-label"></span>
       </label>
-    </div>
-    <!-- Delete -->
-    <div>
-      <button class="btn-text"
-              hx-post="/api/study/cmp"
+      <button hx-post="/api/study/cmp"
               hx-vals='{"action":"delete","id":"{{ entry.id }}"}'
               hx-target="#cmp-section"
-              hx-swap="innerHTML">✕</button>
+              hx-swap="innerHTML"
+              style="height:32px;width:32px;border-radius:8px;border:none;background:var(--bg);color:#1A1A1A;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>
     </div>
   </div>
   {% endfor %}
 
   <!-- Global filters (shown only when there are entries) -->
   {% if store.ids %}
-  <div style="height:6px"></div>
-  <div class="row-2col">
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
+  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:2px">Time range</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
       <div class="pill-group">
         {% for opt in range_opts %}
         <label class="pill-label {% if opt == store.range %}active{% endif %}">
@@ -116,7 +114,7 @@
       </div>
     </div>
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:2px">Overnight gap</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
         {% for opt in gap_opts %}
         <label class="pill-label {% if opt == store.gap %}active{% endif %}">
@@ -139,3 +137,25 @@
   <!-- Charts -->
   {{ charts_html | safe }}
 </div>
+<script>
+(function() {
+  function parsePastedDate(text) {
+    text = text.trim();
+    var m, d;
+    m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) d = new Date(+m[1], +m[2]-1, +m[3]);
+    if (!d) { m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) d = new Date(+m[3], +m[1]-1, +m[2]); }
+    if (!d) d = new Date(text);
+    if (d && !isNaN(d))
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    return null;
+  }
+  document.querySelectorAll('#cmp-section input[type="date"]').forEach(function(el) {
+    el.addEventListener('paste', function(e) {
+      e.preventDefault();
+      var val = parsePastedDate((e.clipboardData || window.clipboardData).getData('text'));
+      if (val) { el.value = val; el.dispatchEvent(new Event('change')); }
+    });
+  });
+})();
+</script>

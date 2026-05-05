@@ -1,9 +1,10 @@
 {% macro pill(d) %}
-<input type="text" readonly value="{{ d.strftime('%m/%d/%Y') }}"
-       onclick="this.select()"
+<input type="text" readonly value="{{ d.strftime('%b %-d') }}"
+       data-copy="{{ d.strftime('%m/%d/%Y') }}"
+       onclick="navigator.clipboard.writeText(this.dataset.copy).then(function(){showToast('Copied date to clipboard')});"
        style="display:block;font-size:12px;color:#444;background:#F1F2F6;
               border:none;outline:none;padding:3px 10px;border-radius:6px;
-              margin-bottom:4px;width:94px;cursor:default;font-family:inherit;" />
+              margin-bottom:4px;width:94px;cursor:pointer;font-family:inherit;" />
 {% endmacro %}
 
 <!-- Section legend -->
@@ -19,7 +20,7 @@
 <div style="padding:4px 0 4px 16px;width:fit-content">
   <div style="display:flex;flex-wrap:wrap;gap:24px">
     {% for yr, items in bm_by_year.items() %}
-    <div style="min-width:140px">
+    <div style="min-width:120px">
       <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
       {% for d, chg, chg_low in items %}
       {% set note = intraday_notes.get(d.strftime('%Y-%m-%d')) %}
