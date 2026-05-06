@@ -66,7 +66,7 @@ _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 _CC_NORM_OPTS  = ["% from prior close", "% from open"]
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
-                    "#FF3D54", "#F5A623", "#4CAF50", "#888888"]
+                    "#FF3D54", "#F5A623", "#13FF98", "#888888"]
 _CMP_ENTRY_TYPES = ["FOMC", "OPEX", "VIX Exp", "Black Swan", "Specific date"]
 _CMP_OFFSET_OPTS = ["-3 days", "-2 days", "-1 day", "Day of", "+1 day", "+2 days"]
 _CMP_OFFSET_VALS = {"-3 days": -3, "-2 days": -2, "-1 day": -1, "Day of": 0, "+1 day": 1, "+2 days": 2}
@@ -410,7 +410,7 @@ def _build_long_chart_html(selected_range: str, show_events: bool, show_line: bo
     last_close = float(df_long['Close'].iloc[-1])
     first_open = float(df_long['Open'].iloc[0])
     is_down    = (last_close - first_open) < 0
-    line_color = "#FF3D54" if is_down else "#11F185"
+    line_color = "#FF3D54" if is_down else "#13FF98"
     halo_color = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
     events = None
     if show_events:
@@ -480,7 +480,7 @@ def api_intraday():
     day_ch_pct = (day_ch_pts / day_open) * 100
 
     is_down    = day_ch_pts < 0
-    line_color = "#FF3D54" if is_down else "#11F185"
+    line_color = "#FF3D54" if is_down else "#13FF98"
     halo_color = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
     fig = create_spx_chart(
         selected_date.strftime("%b %-d, %Y"),
@@ -725,7 +725,7 @@ def _build_cmp_charts_html(store) -> str:
             if single_entry:
                 cd_ts = pd.Timestamp(cd)
                 eod_val = float((cmp_daily.loc[cd_ts, "Close"] - cmp_daily.loc[cd_ts, "Open"]) / cmp_daily.loc[cd_ts, "Open"] * 100) if cd_ts in cmp_daily.index else 0
-                line_color = "#11F185" if eod_val >= 0 else "#FF3D54"
+                line_color = "#13FF98" if eod_val >= 0 else "#FF3D54"
                 trace_hoverlabel = dict(font=dict(color="#1E1E1E" if eod_val >= 0 else "white"))
             else:
                 line_color = cmp_color
@@ -971,7 +971,7 @@ def _build_cc_results_html(store) -> tuple:
             ev = float(matched.loc[od, "eod_pct"])
             ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
-                line=dict(color="#11F185" if ev >= 0 else "#FF3D54", width=0.8),
+                line=dict(color="#13FF98" if ev >= 0 else "#FF3D54", width=0.8),
                 opacity=0.4, showlegend=False,
                 hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
                 hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
@@ -1094,7 +1094,7 @@ def _build_histogram_figure(eod_series: pd.Series, x_label: str = "EOD % from op
     bins = np.arange(blo, bhi + bsz, bsz)
     cnts, edges = np.histogram(eod_series.values, bins=bins)
     ctrs  = (edges[:-1] + edges[1:]) / 2
-    bclrs = ["#11F185" if c >= 0 else "#FF3D54" for c in ctrs]
+    bclrs = ["#13FF98" if c >= 0 else "#FF3D54" for c in ctrs]
     bpcts = cnts / cnts.sum() * 100 if cnts.sum() > 0 else cnts * 0.0
     fig = go.Figure()
     fig.add_trace(go.Bar(

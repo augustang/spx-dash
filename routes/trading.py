@@ -429,7 +429,7 @@ def api_day_chart():
     df = get_spx_history_intraday(period=day_map.get(period_label, "1d"))
     spx_last, spx_open, _, _ = get_spx_metrics()
     is_down = (spx_last - spx_open) < 0
-    color = "#FF3D54" if is_down else "#11F185"
+    color = "#FF3D54" if is_down else "#13FF98"
     halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
 
     store = _get_store()
@@ -473,7 +473,7 @@ def api_month_chart():
         df.loc[now_ts, 'Close'] = spx_last
 
     is_down = (spx_last - spx_open) < 0
-    color = "#FF3D54" if is_down else "#11F185"
+    color = "#FF3D54" if is_down else "#13FF98"
     halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
 
     period    = month_params.get(period_label, "6mo")
