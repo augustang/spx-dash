@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}SPX Dashboard{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.plot.ly/plotly-2.35.3.min.js" defer></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
 </head>
 <body>
 
@@ -221,29 +221,51 @@ function showToast(msg) {
 }
 function showZoomToast() { showToast('Double-click to zoom back out'); }
 
+// Cache of rendered chart elements keyed by ID. When htmx swaps a section,
+// the old element (with Plotly hover state intact) is detached from DOM but
+// still referenced here. On re-render we restore it and call Plotly.react
+// (not newPlot), which updates data/layout without reinitialising the hover layer.
+var _plotCache = {};
+
 document.addEventListener('htmx:afterSwap', function(e) {
   e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
-    // Defer to next frame so the browser has finished laying out the new DOM
-    // before Plotly measures container dimensions and binds its hover layer.
-    requestAnimationFrame(function() {
-      try {
-        var fig = JSON.parse(el.dataset.plotly);
-        // Use newPlot (not react) for freshly-swapped elements — react on a
-        // brand-new element can leave the hover/event layer uninitialised.
-        Plotly.newPlot(el, fig.data, fig.layout, { responsive: true, displayModeBar: false });
-        positionStrikePills(el);
-        positionEventLabels(el);
-        el.on('plotly_relayout', function() {
-          positionStrikePills(el);
-          positionEventLabels(el);
-        });
-        el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
-      } catch (err) {
-        console.error('Plotly render failed', err, el);
-      }
-    });
+    requestAnimationFrame(function() { _renderPlotlyEl(el); });
   });
 });
+
+// Named so the retry path can call it without capturing stale closures.
+function _renderPlotlyEl(el) {
+  if (typeof Plotly === 'undefined') {
+    setTimeout(function() { _renderPlotlyEl(el); }, 50);
+    return;
+  }
+
+  // Restore cached element so Plotly.react can diff without losing hover state.
+  var cached = _plotCache[el.id];
+  if (cached && cached !== el && cached._fullLayout && !document.body.contains(cached)) {
+    if (el.parentNode) el.parentNode.replaceChild(cached, el);
+    cached.dataset.plotly = el.dataset.plotly;
+    el = cached;
+  }
+  if (!document.body.contains(el)) return;
+
+  try {
+    var isUpdate = !!(el._fullLayout);
+    var plotFn = isUpdate ? Plotly.react : Plotly.newPlot;
+    var fig = JSON.parse(el.dataset.plotly);
+    fig.layout.autosize = true;
+    plotFn(el, fig.data, fig.layout, { displayModeBar: false });
+    _plotCache[el.id] = el;
+    positionStrikePills(el);
+    positionEventLabels(el);
+    if (!isUpdate) {
+      el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
+      el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
+    }
+  } catch (err) {
+    console.error('Plotly render failed', err, el);
+  }
+}
 </script>
 
 </body>

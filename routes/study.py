@@ -364,7 +364,7 @@ def _chart_html(div_id: str, fig: go.Figure, evt_payload=None) -> str:
         if evt_payload else ''
     )
     return (
-        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:{h}px">'
+        f'<div class="chart-pill-wrap" style="position:relative;width:100%;height:{h}px;overflow:hidden">'
         f'<div id="{div_id}" data-plotly="{fig_json}"{evt_attr} '
         f'style="width:100%;height:{h}px"></div>'
         f'</div>'
@@ -739,7 +739,7 @@ def _build_cmp_charts_html(store) -> str:
         font=dict(family="Inter, sans-serif"),
         dragmode="zoom", height=560,
         margin=dict(l=48, r=0, t=10, b=30),
-        plot_bgcolor="white", paper_bgcolor="white", hovermode="closest",
+        plot_bgcolor="white", paper_bgcolor="white", hovermode="closest", hoverdistance=-1,
         hoverlabel=dict(bordercolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
         xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M", hoverformat="%H:%M",
                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
@@ -966,7 +966,7 @@ def _build_cc_results_html(store) -> tuple:
         ofig.update_layout(
             font=dict(family="Inter, sans-serif"),
             height=400, margin=dict(l=48, r=0, t=16, b=30),
-            plot_bgcolor="white", paper_bgcolor="white", hovermode="closest",
+            plot_bgcolor="white", paper_bgcolor="white", hovermode="closest", hoverdistance=-1,
             hoverlabel=dict(bordercolor="rgba(0,0,0,0)", font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
             xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
                        tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
