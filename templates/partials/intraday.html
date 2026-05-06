@@ -1,14 +1,14 @@
 {% macro date_input() %}
-<div style="margin-bottom:20px;position:relative;display:inline-block">
+<div style="margin-bottom:20px;position:relative;display:table">
   <input type="date" name="date" id="intraday-date"
          value="{{ date_str }}"
          min="{{ min_date }}"
          max="{{ today }}"
          style="font-size:13px;border:none;outline:none;box-shadow:none;
-                padding:6px 36px 6px 10px;height:32px;background:var(--bg);
-                border-radius:8px;font-family:inherit;color:#1A1A1A;
-                display:block;-webkit-appearance:none;appearance:none;
-                cursor:pointer;" />
+                padding:0 36px 0 10px;height:32px;line-height:32px;
+                background:var(--bg);border-radius:8px;font-family:inherit;
+                color:#1A1A1A;display:block;box-sizing:border-box;
+                -webkit-appearance:none;appearance:none;cursor:pointer;" />
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
        fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
        style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none">
@@ -17,7 +17,6 @@
     <line x1="8" y1="2" x2="8" y2="6"></line>
     <line x1="3" y1="10" x2="21" y2="10"></line>
   </svg>
-</div>
 </div>
 <script>
 (function() {
