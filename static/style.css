@@ -106,10 +106,10 @@ main {
 
 @media (max-width: 768px) {
     main {
-        padding: 24px 16px 64px;
+        padding: 24px 0 64px;
     }
     .spx-header {
-        padding: 16px 16px 16px;
+        padding: 16px 0 16px;
     }
     .spx-header-left {
         flex-wrap: wrap;
