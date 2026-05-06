@@ -943,7 +943,7 @@ def _build_cc_results_html(store) -> tuple:
     std  = eod.std()
     pills = _stat_pills_html(mean, med, ppos, std, margin_top=24)
 
-    hist_x_label = "EOD % change" if norm == "% from prior close" else "EOD % from open"
+    hist_x_label = "EOD % from prior close" if norm == "% from prior close" else "EOD % from open"
     hist_fig = _build_histogram_figure(eod, x_label=hist_x_label)
     hist_html = _chart_html('cc-hist-chart', hist_fig)
 
