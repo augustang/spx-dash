@@ -270,6 +270,7 @@ def _build_daily_snapshots() -> pd.DataFrame:
     snap = pd.DataFrame(index=grp_open.index)
     snap.index.name = "date"
     snap["eod_pct"]     = (grp_close / grp_open - 1) * 100
+    snap["eod_chg_pct"] = (grp_close / grp_close.shift(1) - 1) * 100
     snap["eod_low_pct"] = (grp_low   / grp_open - 1) * 100
     snap["prev_close"]  = grp_close.shift(1)
     if not frd1.empty:
@@ -930,7 +931,9 @@ def _build_cc_results_html(store) -> tuple:
     if n == 0:
         return n_badge_html, ""
 
-    eod = matched["eod_pct"].dropna()
+    norm = store.get("norm", "% from prev close")
+    eod_col = "eod_chg_pct" if norm == "% from prev close" else "eod_pct"
+    eod = matched[eod_col].dropna() if eod_col in matched.columns else matched["eod_pct"].dropna()
     if eod.empty:
         return n_badge_html, ""
 
@@ -940,7 +943,8 @@ def _build_cc_results_html(store) -> tuple:
     std  = eod.std()
     pills = _stat_pills_html(mean, med, ppos, std, margin_top=24)
 
-    hist_fig = _build_histogram_figure(eod)
+    hist_x_label = "EOD % change" if norm == "% from prev close" else "EOD % from open"
+    hist_fig = _build_histogram_figure(eod, x_label=hist_x_label)
     hist_html = _chart_html('cc-hist-chart', hist_fig)
 
     # Intraday overlay (up to 25 most recent)
@@ -948,7 +952,6 @@ def _build_cc_results_html(store) -> tuple:
     frd5 = _load_frd_5min()
     ov_dates = sorted(matched.index.tolist(), reverse=True)[:25]
     _ref = datetime.date(2000, 1, 3)
-    norm = store.get("norm", "% from prev close")
     use_prev_close = (norm == "% from prev close")
     if ov_dates and not frd5.empty:
         ofig = go.Figure()
@@ -1081,7 +1084,7 @@ def _group_by_year(bm_filtered):
     return {yr: sorted(items) for yr, items in sorted(by_year.items(), reverse=True)}
 
 
-def _build_histogram_figure(eod_series: pd.Series) -> go.Figure:
+def _build_histogram_figure(eod_series: pd.Series, x_label: str = "EOD % from open") -> go.Figure:
     mean = eod_series.mean()
     med  = eod_series.median()
     rng  = float(eod_series.max() - eod_series.min())
@@ -1117,7 +1120,7 @@ def _build_histogram_figure(eod_series: pd.Series) -> go.Figure:
         xaxis=dict(showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                   title=dict(text="EOD % from open", font=dict(family="Inter, sans-serif", size=11, color="#888"))),
+                   title=dict(text=x_label, font=dict(family="Inter, sans-serif", size=11, color="#888"))),
         yaxis=dict(showgrid=True, gridcolor="#F0F0F0",
                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
