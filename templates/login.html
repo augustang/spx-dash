@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SPX Dashboard</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <style>
     body {
@@ -23,9 +24,9 @@
     }
     .login-title {
       font-size: 18px;
-      font-weight: 600;
+      font-weight: 400;
       color: var(--text);
-      margin: 0 0 6px;
+      margin: 0 0 28px;
     }
     .login-sub {
       font-size: 13px;
@@ -59,7 +60,7 @@
       border: none;
       border-radius: 10px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 400;
       cursor: pointer;
     }
     .login-btn:hover {
@@ -76,7 +77,6 @@
 <body>
   <div class="login-card">
     <p class="login-title">SPX Dashboard</p>
-    <p class="login-sub">Enter the password to continue.</p>
     <form method="post">
       <p class="login-label">Password</p>
       <input class="login-input" type="password" name="password" autofocus autocomplete="current-password" />
