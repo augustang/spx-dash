@@ -297,7 +297,8 @@ def api_spreads():
     contracts = store["saved_contracts"]
     target    = store["saved_target"]
 
-    spx_last, spx_open, _, _ = get_spx_metrics()
+    spx_last, spx_open, spx_prior, _ = get_spx_metrics()
+    ref = spx_prior if spx_prior else spx_last
     live_puts_df = get_spx_puts()
 
     spreads_list, seen_strikes = [], set()
@@ -316,8 +317,8 @@ def api_spreads():
                 lp = long_match.iloc[0]
                 sp = short['lastPrice'] - lp['lastPrice']
                 if sp > 0:
-                    pts_out = abs(ss - spx_last)
-                    pct_out = (pts_out / spx_last) * 100
+                    pts_out = abs(ss - ref)
+                    pct_out = (pts_out / ref) * 100
                     spreads_list.append({
                         "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
                         "Strike": int(ss), "Leg": int(ls),
@@ -339,8 +340,8 @@ def api_spreads():
                 lp = lm.iloc[0]
                 sp = short['lastPrice'] - lp['lastPrice']
                 if sp > 0:
-                    pts_out = abs(ss - spx_last)
-                    pct_out = (pts_out / spx_last) * 100
+                    pts_out = abs(ss - ref)
+                    pct_out = (pts_out / ref) * 100
                     spreads_list.append({
                         "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
                         "Strike": int(ss), "Leg": int(ls),
