@@ -37,7 +37,7 @@
     </div>
 
     <!-- Type-specific params -->
-    {% if ct == "% from open at time" %}
+    {% if ct == "% change at time" %}
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">At time (ET)</p>
       <select class="figma-dropdown"
@@ -313,7 +313,7 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overlay %</p>
       <div class="pill-group">
         {% for opt in norm_opts %}
-        <label class="pill-label {% if opt == (store.norm or '% change') %}active{% endif %}">
+        <label class="pill-label {% if opt == (store.norm or '% from prev close') %}active{% endif %}">
           <input type="radio" name="cc_norm" value="{{ opt }}"
                  {% if opt == (store.norm or '% from prev close') %}checked{% endif %}
                  hx-post="/api/study/cc"

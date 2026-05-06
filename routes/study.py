@@ -58,12 +58,12 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 _CC_SNAP_TIMES = [(10, 0), (10, 30), (11, 0), (11, 30), (12, 0), (13, 0), (14, 0), (15, 0)]
 _CC_TIME_OPTS  = [f"{h}:{m:02d}" for h, m in _CC_SNAP_TIMES]
-_CC_COND_TYPES = ["% from open at time", "Days from event", "Day of week", "Month", "Overnight gap"]
+_CC_COND_TYPES = ["% change at time", "Days from event", "Day of week", "Month", "Overnight gap"]
 _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
 _CC_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-_CC_NORM_OPTS  = ["% change", "% from open"]
+_CC_NORM_OPTS  = ["% from prev close", "% from open"]
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
                     "#FF3D54", "#F5A623", "#4CAF50", "#888888"]
@@ -102,7 +102,7 @@ _DEFAULT_CMP_STORE = {
                  "date": (datetime.date.today() - datetime.timedelta(days=1)).isoformat(),
                  "enabled": True}],
 }
-_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All", "norm": "% change"}
+_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All", "norm": "% from prev close"}
 
 
 def _get_cmp_store() -> dict:
@@ -826,7 +826,7 @@ def api_cc_update():
     elif action == 'filter':
         store["range"] = request.form.get('range', store.get("range", "All"))
         store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
-        store["norm"]  = request.form.get('norm',  store.get("norm",  "% change"))
+        store["norm"]  = request.form.get('norm',  store.get("norm",  "% from prev close"))
     _save_cc_store(store)
     n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
@@ -870,7 +870,7 @@ def _apply_cc_conditions(snap, store):
         if not entry.get("enabled", True):
             continue
         ct = entry.get("type", _CC_COND_TYPES[0])
-        if ct == "% from open at time":
+        if ct == "% change at time":
             col = "pct_at_" + entry.get("time", "11:00").replace(":", "")
             lo, hi = float(entry.get("pct_min", -1.0)), float(entry.get("pct_max", -0.1))
             if col in snap.columns:
@@ -948,8 +948,8 @@ def _build_cc_results_html(store) -> tuple:
     frd5 = _load_frd_5min()
     ov_dates = sorted(matched.index.tolist(), reverse=True)[:25]
     _ref = datetime.date(2000, 1, 3)
-    norm = store.get("norm", "% change")
-    use_prev_close = (norm == "% change")
+    norm = store.get("norm", "% from prev close")
+    use_prev_close = (norm == "% from prev close")
     if ov_dates and not frd5.empty:
         ofig = go.Figure()
         for od in ov_dates:
@@ -974,7 +974,7 @@ def _build_cc_results_html(store) -> tuple:
                 hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-        y_title = "% change" if use_prev_close else "% from open"
+        y_title = "% from prev close" if use_prev_close else "% from open"
         ofig.update_layout(
             font=dict(family="Inter, sans-serif"),
             height=400, margin=dict(l=48, r=0, t=16, b=30),
