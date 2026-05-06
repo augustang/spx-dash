@@ -267,6 +267,19 @@ function _renderPlotlyEl(el) {
     console.error('Plotly render failed', err, el);
   }
 }
+
+// Delegated listener for the intraday date picker so it survives HTMX swaps.
+// Handles mobile browsers (iOS Safari) where re-attached hx-trigger="change"
+// on a swapped element is unreliable.
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'intraday-date') {
+    htmx.ajax('GET', '/api/study/intraday', {
+      target: '#intraday-content',
+      swap: 'innerHTML',
+      values: { date: e.target.value }
+    });
+  }
+});
 </script>
 
 </body>
