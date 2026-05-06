@@ -10,7 +10,7 @@
 {% macro pct_spans(oc, ol) %}
 {% if oc is not none %}
 {% set sign  = "+" if oc >= 0 else "" %}
-{% set color = "#13FF98" if oc >= 0 else "#FF3D54" %}
+{% set color = "var(--green-400)" if oc >= 0 else "#FF3D54" %}
 <span style="font-size:12px;color:{{ color }}">{{ sign }}{{ "%.1f"|format(oc) }}%</span>
 {% endif %}
 {% if ol is not none %}
@@ -20,7 +20,7 @@
 
 <!-- Section legend -->
 <div style="display:flex;gap:28px;align-items:center;margin-bottom:28px">
-  {% for color, label in [("#13FF98","Positive open to close"),("#FF3D54","Negative open to close"),("#B71AFF","Open to low")] %}
+  {% for color, label in [("var(--green-400)","Positive open to close"),("#FF3D54","Negative open to close"),("#B71AFF","Open to low")] %}
   <span style="display:flex;align-items:center;gap:5px">
     <span style="width:4px;height:4px;border-radius:50%;background:{{ color }};display:inline-block;flex-shrink:0"></span>
     <span style="font-size:11px;color:#888">{{ label }}</span>
@@ -46,7 +46,7 @@
           {% set ol = ol_pct.get(d) %}
           {% if oc is not none %}
           {% set sign = "+" if oc >= 0 else "" %}
-          {% set col  = "#13FF98" if oc >= 0 else "#FF3D54" %}
+          {% set col  = "var(--green-400)" if oc >= 0 else "#FF3D54" %}
           <span style="font-size:12px;color:{{ col }}">{{ sign }}{{ "%.1f"|format(oc) }}%</span>
           {% endif %}
           {% if ol is not none %}

@@ -6,6 +6,10 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
+# ── Design tokens ────────────────────────────────────────────────────────────
+GREEN_400 = "#13FF98"  # bright green — bars, lines, backgrounds
+GREEN_600 = "#00D679"  # darker green — standalone text only
+
 # ── Shared hover / axis styles ────────────────────────────────────────────────
 _HOVERLABEL = dict(
     bgcolor="rgba(255,255,255,0.92)",
@@ -56,7 +60,7 @@ def create_long_chart(
             x=ohlc_df.index,
             open=ohlc_df["Open"], high=ohlc_df["High"],
             low=ohlc_df["Low"],   close=ohlc_df["Close"],
-            increasing=dict(line=dict(color="#13FF98", width=1), fillcolor="#13FF98"),
+            increasing=dict(line=dict(color=GREEN_400, width=1), fillcolor=GREEN_400),
             decreasing=dict(line=dict(color="#FF3D54", width=1), fillcolor="#FF3D54"),
             showlegend=False,
             text=hover_texts,
@@ -168,7 +172,7 @@ def create_spx_chart(
             x=ohlc_df.index,
             open=ohlc_df['Open'], high=ohlc_df['High'],
             low=ohlc_df['Low'], close=ohlc_df['Close'],
-            increasing=dict(line=dict(color="#13FF98", width=1), fillcolor="#13FF98"),
+            increasing=dict(line=dict(color=GREEN_400, width=1), fillcolor=GREEN_400),
             decreasing=dict(line=dict(color="#FF3D54", width=1), fillcolor="#FF3D54"),
             line=dict(width=1),
             showlegend=False,

@@ -9,7 +9,7 @@
 
 <!-- Section legend -->
 <div style="display:flex;gap:28px;align-items:center;margin-bottom:28px">
-  {% for color, label in [("#13FF98","Positive open to close"),("#FF3D54","Negative open to close"),("#B71AFF","Open to low")] %}
+  {% for color, label in [("var(--green-400)","Positive open to close"),("#FF3D54","Negative open to close"),("#B71AFF","Open to low")] %}
   <span style="display:flex;align-items:center;gap:5px">
     <span style="width:4px;height:4px;border-radius:50%;background:{{ color }};display:inline-block;flex-shrink:0"></span>
     <span style="font-size:11px;color:#888">{{ label }}</span>
@@ -26,7 +26,7 @@
       {% set note = intraday_notes.get(d.strftime('%Y-%m-%d')) %}
       <div style="margin-bottom:22px">
         <div style="display:flex;gap:8px;margin-bottom:6px">
-          {% set col_chg = "#13FF98" if chg >= 0 else "#FF3D54" %}
+          {% set col_chg = "var(--green-400)" if chg >= 0 else "#FF3D54" %}
           <span style="font-size:12px;color:{{ col_chg }}">{{ "+" if chg >= 0 else "" }}{{ "%.1f"|format(chg) }}%</span>
           <span style="font-size:12px;color:#B71AFF">{{ "%.1f"|format(chg_low) }}%</span>
         </div>

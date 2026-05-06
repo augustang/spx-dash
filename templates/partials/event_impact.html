@@ -18,7 +18,7 @@
         {% if val != val %}{# NaN #}
         <td>—</td>
         {% elif val >= 0 %}
-        <td style="color:#00D679;font-weight:600">+{{ "%.2f"|format(val) }}%</td>
+        <td style="color:var(--green-600);font-weight:600">+{{ "%.2f"|format(val) }}%</td>
         {% else %}
         <td style="color:#FF3D54;font-weight:600">{{ "%.2f"|format(val) }}%</td>
         {% endif %}
