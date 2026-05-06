@@ -63,7 +63,7 @@ def login():
         if request.form.get('password') == _DASHBOARD_PASSWORD and _DASHBOARD_PASSWORD:
             session.permanent = True
             session['auth'] = True
-            return redirect(url_for('trading.index'))
+            return redirect(url_for('trading.trading'))
         error = 'Incorrect password.'
     return render_template('login.html', error=error)
 
