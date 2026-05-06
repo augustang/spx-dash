@@ -309,6 +309,24 @@
         {% endfor %}
       </div>
     </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Overlay %</p>
+      <div class="pill-group">
+        {% for opt in norm_opts %}
+        <label class="pill-label {% if opt == (store.norm or '% change') %}active{% endif %}">
+          <input type="radio" name="cc_norm" value="{{ opt }}"
+                 {% if opt == (store.norm or '% from prev close') %}checked{% endif %}
+                 hx-post="/api/study/cc"
+                 hx-vals='{"action":"filter","norm":"{{ opt }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ opt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
   </div>
   {% endif %}
   {{ results_html | safe }}

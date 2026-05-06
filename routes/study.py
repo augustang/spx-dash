@@ -63,6 +63,7 @@ _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
 _CC_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+_CC_NORM_OPTS  = ["% change", "% from open"]
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
                     "#FF3D54", "#F5A623", "#4CAF50", "#888888"]
@@ -101,7 +102,7 @@ _DEFAULT_CMP_STORE = {
                  "date": (datetime.date.today() - datetime.timedelta(days=1)).isoformat(),
                  "enabled": True}],
 }
-_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All"}
+_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All", "norm": "% change"}
 
 
 def _get_cmp_store() -> dict:
@@ -270,6 +271,7 @@ def _build_daily_snapshots() -> pd.DataFrame:
     snap.index.name = "date"
     snap["eod_pct"]     = (grp_close / grp_open - 1) * 100
     snap["eod_low_pct"] = (grp_low   / grp_open - 1) * 100
+    snap["prev_close"]  = grp_close.shift(1)
     if not frd1.empty:
         ds = frd1.sort_index()
         gap_s = (ds["Open"] / ds["Close"].shift(1) - 1) * 100
@@ -824,6 +826,7 @@ def api_cc_update():
     elif action == 'filter':
         store["range"] = request.form.get('range', store.get("range", "All"))
         store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
+        store["norm"]  = request.form.get('norm',  store.get("norm",  "% change"))
     _save_cc_store(store)
     n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
@@ -835,6 +838,7 @@ def api_cc_update():
         mon_labels=_CC_MON_LABELS,
         range_opts=_CMP_RANGE_OPTS,
         gap_opts=_CMP_GAP_OPTS,
+        norm_opts=_CC_NORM_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
     )
@@ -853,6 +857,7 @@ def api_cc_get():
         mon_labels=_CC_MON_LABELS,
         range_opts=_CMP_RANGE_OPTS,
         gap_opts=_CMP_GAP_OPTS,
+        norm_opts=_CC_NORM_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
     )
@@ -943,6 +948,8 @@ def _build_cc_results_html(store) -> tuple:
     frd5 = _load_frd_5min()
     ov_dates = sorted(matched.index.tolist(), reverse=True)[:25]
     _ref = datetime.date(2000, 1, 3)
+    norm = store.get("norm", "% change")
+    use_prev_close = (norm == "% change")
     if ov_dates and not frd5.empty:
         ofig = go.Figure()
         for od in ov_dates:
@@ -952,8 +959,12 @@ def _build_cc_results_html(store) -> tuple:
             if odf.empty:
                 continue
             ox = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
-            oo = float(odf["Open"].iloc[0])
-            oy = ((odf["Close"] / oo - 1) * 100).round(2).tolist()
+            if use_prev_close:
+                pc = matched.loc[od, "prev_close"] if "prev_close" in matched.columns else None
+                base = float(pc) if pc and not pd.isna(pc) else float(odf["Open"].iloc[0])
+            else:
+                base = float(odf["Open"].iloc[0])
+            oy = ((odf["Close"] / base - 1) * 100).round(2).tolist()
             ev = float(matched.loc[od, "eod_pct"])
             ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
@@ -963,6 +974,7 @@ def _build_cc_results_html(store) -> tuple:
                 hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
+        y_title = "% change" if use_prev_close else "% from open"
         ofig.update_layout(
             font=dict(family="Inter, sans-serif"),
             height=400, margin=dict(l=48, r=0, t=16, b=30),
@@ -977,7 +989,7 @@ def _build_cc_results_html(store) -> tuple:
             yaxis=dict(automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
                        tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                        ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                       title=dict(text="% from open", font=dict(family="Inter, sans-serif", size=10, color="#888"))),
+                       title=dict(text=y_title, font=dict(family="Inter, sans-serif", size=10, color="#888"))),
         )
         overlay_html = (
             f'<p style="font-size:11px;color:#888;margin-top:24px">'
