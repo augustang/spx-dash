@@ -313,9 +313,9 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overlay %</p>
       <div class="pill-group">
         {% for opt in norm_opts %}
-        <label class="pill-label {% if opt == (store.norm or '% from prev close') %}active{% endif %}">
+        <label class="pill-label {% if opt == (store.norm or '% from prior close') %}active{% endif %}">
           <input type="radio" name="cc_norm" value="{{ opt }}"
-                 {% if opt == (store.norm or '% from prev close') %}checked{% endif %}
+                 {% if opt == (store.norm or '% from prior close') %}checked{% endif %}
                  hx-post="/api/study/cc"
                  hx-vals='{"action":"filter","norm":"{{ opt }}"}'
                  hx-trigger="change"

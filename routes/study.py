@@ -63,7 +63,7 @@ _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
 _CC_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-_CC_NORM_OPTS  = ["% from prev close", "% from open"]
+_CC_NORM_OPTS  = ["% from prior close", "% from open"]
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
                     "#FF3D54", "#F5A623", "#4CAF50", "#888888"]
@@ -102,7 +102,7 @@ _DEFAULT_CMP_STORE = {
                  "date": (datetime.date.today() - datetime.timedelta(days=1)).isoformat(),
                  "enabled": True}],
 }
-_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All", "norm": "% from prev close"}
+_DEFAULT_CC_STORE = {"ids": [], "next_id": 0, "entries": [], "range": "All", "gap": "All", "norm": "% from prior close"}
 
 
 def _get_cmp_store() -> dict:
@@ -827,7 +827,7 @@ def api_cc_update():
     elif action == 'filter':
         store["range"] = request.form.get('range', store.get("range", "All"))
         store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
-        store["norm"]  = request.form.get('norm',  store.get("norm",  "% from prev close"))
+        store["norm"]  = request.form.get('norm',  store.get("norm",  "% from prior close"))
     _save_cc_store(store)
     n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
@@ -931,8 +931,8 @@ def _build_cc_results_html(store) -> tuple:
     if n == 0:
         return n_badge_html, ""
 
-    norm = store.get("norm", "% from prev close")
-    eod_col = "eod_chg_pct" if norm == "% from prev close" else "eod_pct"
+    norm = store.get("norm", "% from prior close")
+    eod_col = "eod_chg_pct" if norm == "% from prior close" else "eod_pct"
     eod = matched[eod_col].dropna() if eod_col in matched.columns else matched["eod_pct"].dropna()
     if eod.empty:
         return n_badge_html, ""
@@ -943,7 +943,7 @@ def _build_cc_results_html(store) -> tuple:
     std  = eod.std()
     pills = _stat_pills_html(mean, med, ppos, std, margin_top=24)
 
-    hist_x_label = "EOD % change" if norm == "% from prev close" else "EOD % from open"
+    hist_x_label = "EOD % change" if norm == "% from prior close" else "EOD % from open"
     hist_fig = _build_histogram_figure(eod, x_label=hist_x_label)
     hist_html = _chart_html('cc-hist-chart', hist_fig)
 
@@ -952,7 +952,7 @@ def _build_cc_results_html(store) -> tuple:
     frd5 = _load_frd_5min()
     ov_dates = sorted(matched.index.tolist(), reverse=True)[:25]
     _ref = datetime.date(2000, 1, 3)
-    use_prev_close = (norm == "% from prev close")
+    use_prev_close = (norm == "% from prior close")
     if ov_dates and not frd5.empty:
         ofig = go.Figure()
         for od in ov_dates:
@@ -977,7 +977,7 @@ def _build_cc_results_html(store) -> tuple:
                 hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-        y_title = "% from prev close" if use_prev_close else "% from open"
+        y_title = "% from prior close" if use_prev_close else "% from open"
         ofig.update_layout(
             font=dict(family="Inter, sans-serif"),
             height=400, margin=dict(l=48, r=0, t=16, b=30),
