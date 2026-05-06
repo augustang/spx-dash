@@ -102,6 +102,14 @@ main {
     .metrics-wrap .row-3col {
         grid-template-columns: 1fr 1fr;
     }
+    .card.mb-3,
+    .card.mb-4,
+    [id$="-content"].mb-4 {
+        margin-bottom: 0;
+    }
+    * + .section-label {
+        margin-top: 32px;
+    }
 }
 
 @media (max-width: 768px) {
