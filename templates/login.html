@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SPX Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--bg);
+    }
+    .login-card {
+      background: var(--white);
+      border-radius: 16px;
+      box-shadow: var(--shadow-light);
+      padding: 40px 36px 36px;
+      width: 100%;
+      max-width: 360px;
+    }
+    .login-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0 0 6px;
+    }
+    .login-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 28px;
+    }
+    .login-label {
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+    .login-input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      padding: 0 14px;
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    .login-input:focus {
+      border-color: #aaa;
+    }
+    .login-btn {
+      width: 100%;
+      height: 40px;
+      background: var(--text);
+      color: var(--white);
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .login-btn:hover {
+      background: #333;
+    }
+    .login-error {
+      font-size: 12px;
+      color: #FF3D54;
+      margin-top: -12px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <p class="login-title">SPX Dashboard</p>
+    <p class="login-sub">Enter the password to continue.</p>
+    <form method="post">
+      <p class="login-label">Password</p>
+      <input class="login-input" type="password" name="password" autofocus autocomplete="current-password" />
+      {% if error %}
+      <p class="login-error">{{ error }}</p>
+      {% endif %}
+      <button class="login-btn" type="submit">Continue</button>
+    </form>
+  </div>
+</body>
+</html>
