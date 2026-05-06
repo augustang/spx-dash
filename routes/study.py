@@ -457,6 +457,7 @@ def api_intraday():
     day_close = float(df_day['Close'].iloc[-1])
 
     gap_pts = gap_pct = None
+    prior_close = None
     try:
         df_long = get_spx_daily(1)
         if not df_long.empty:
@@ -476,8 +477,9 @@ def api_intraday():
         vol_pts = vol_pct * day_open / 100
         vol_str = f"{vol_pts:.1f} pts ({vol_pct:.2f}%)"
 
-    day_ch_pts = day_close - day_open
-    day_ch_pct = (day_ch_pts / day_open) * 100
+    _ref_price    = prior_close if prior_close is not None else day_open
+    day_ch_pts    = day_close - _ref_price
+    day_ch_pct    = (day_ch_pts / _ref_price) * 100
 
     is_down    = day_ch_pts < 0
     line_color = "#FF3D54" if is_down else GREEN_400
@@ -632,11 +634,15 @@ def _build_cmp_charts_html(store) -> str:
     cmp_daily = _load_frd_daily()
     cmp_frd5  = _load_frd_5min()
     gap_map: dict[datetime.date, float] = {}
+    prev_close_s = pd.Series(dtype=float)
+    eod_chg_s    = pd.Series(dtype=float)
     td_idx = pd.DatetimeIndex([])
     if not cmp_daily.empty:
         ds = cmp_daily.sort_index()
         td_idx = ds.index
-        gap_s = (ds["Open"] / ds["Close"].shift(1) - 1) * 100
+        gap_s        = (ds["Open"] / ds["Close"].shift(1) - 1) * 100
+        prev_close_s = ds["Close"].shift(1)
+        eod_chg_s    = (ds["Close"] / prev_close_s - 1) * 100
         for ts, gv in gap_s.items():
             if pd.notna(gv):
                 gap_map[ts.date()] = float(gv)
@@ -663,10 +669,8 @@ def _build_cmp_charts_html(store) -> str:
         for _, _, entry_dates in all_entries:
             for ed in entry_dates:
                 ed_ts = pd.Timestamp(ed)
-                if ed_ts in cmp_daily.index:
-                    row = cmp_daily.loc[ed_ts]
-                    if row["Open"] != 0:
-                        eod_all.append(float((row["Close"] - row["Open"]) / row["Open"] * 100))
+                if ed_ts in eod_chg_s.index and not pd.isna(eod_chg_s.loc[ed_ts]):
+                    eod_all.append(float(eod_chg_s.loc[ed_ts]))
         if eod_all:
             eod_s  = pd.Series(eod_all)
             h_mean = eod_s.mean()
@@ -680,7 +684,7 @@ def _build_cmp_charts_html(store) -> str:
                 hbg = "#ecff8b"
             else:
                 hbg = "#13ff98"
-            hist_fig = _build_histogram_figure(eod_s)
+            hist_fig = _build_histogram_figure(eod_s, x_label="EOD % from prior close")
             n_badge_html = (
                 f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
                 f'background:{hbg};font-size:12px;font-weight:400;'
@@ -711,8 +715,8 @@ def _build_cmp_charts_html(store) -> str:
     cmp_fig = go.Figure()
     for cmp_color, cmp_lbl, entry_dates in all_entries:
         for cd in entry_dates:
+            ots = pd.Timestamp(cd)
             if not cmp_frd5.empty:
-                ots = pd.Timestamp(cd)
                 ote = ots + pd.Timedelta(hours=23, minutes=59)
                 cdf = cmp_frd5.loc[ots:ote]
             else:
@@ -720,11 +724,10 @@ def _build_cmp_charts_html(store) -> str:
             if cdf.empty:
                 continue
             times = [datetime.datetime.combine(_ref, ts.time()) for ts in cdf.index]
-            op = float(cdf["Open"].iloc[0])
-            pct = ((cdf["Close"] / op - 1) * 100).round(2)
+            pc = float(prev_close_s.loc[ots]) if ots in prev_close_s.index and not pd.isna(prev_close_s.loc[ots]) else float(cdf["Open"].iloc[0])
+            pct = ((cdf["Close"] / pc - 1) * 100).round(2)
             if single_entry:
-                cd_ts = pd.Timestamp(cd)
-                eod_val = float((cmp_daily.loc[cd_ts, "Close"] - cmp_daily.loc[cd_ts, "Open"]) / cmp_daily.loc[cd_ts, "Open"] * 100) if cd_ts in cmp_daily.index else 0
+                eod_val = float(eod_chg_s.loc[ots]) if ots in eod_chg_s.index and not pd.isna(eod_chg_s.loc[ots]) else 0
                 line_color = GREEN_400 if eod_val >= 0 else "#FF3D54"
                 trace_hoverlabel = dict(font=dict(color="#1E1E1E" if eod_val >= 0 else "white"))
             else:
@@ -753,7 +756,7 @@ def _build_cmp_charts_html(store) -> str:
         yaxis=dict(automargin=False, showgrid=True, gridcolor="#F0F0F0", side="left",
                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                   title=dict(text="% from open", font=dict(family="Inter, sans-serif", size=10, color="#666")),
+                   title=dict(text="% from prior close", font=dict(family="Inter, sans-serif", size=10, color="#666")),
                    ticksuffix="%"),
     )
     return n_badge_html, hist_html + leg_html + f'<div style="margin-top:24px">' + _chart_html('cmp-overlay-chart', cmp_fig) + '</div>'
@@ -1046,11 +1049,16 @@ def api_notable_events():
     oc_pct: dict[datetime.date, float] = {}
     ol_pct: dict[datetime.date, float] = {}
     if not ne_daily.empty and {"Open", "Close", "Low"}.issubset(ne_daily.columns):
-        for ts, row in ne_daily.iterrows():
+        ne_sorted    = ne_daily.sort_index()
+        ne_prev_cls  = ne_sorted["Close"].shift(1)
+        for ts, row in ne_sorted.iterrows():
+            d = ts.date()
+            pc = ne_prev_cls.loc[ts] if not pd.isna(ne_prev_cls.loc[ts]) else None
+            ref = pc if pc is not None else (row["Open"] if row["Open"] != 0 else None)
+            if ref:
+                oc_pct[d] = (row["Close"] - ref) / ref * 100
             if row["Open"] and row["Open"] != 0:
-                d = ts.date()
-                oc_pct[d] = (row["Close"] - row["Open"]) / row["Open"] * 100
-                ol_pct[d] = (row["Low"]   - row["Open"]) / row["Open"] * 100
+                ol_pct[d] = (row["Low"] - row["Open"]) / row["Open"] * 100
     all_years = list(range(datetime.date.today().year, 2018, -1))
     return render_template('partials/notable_events.html',
         notable_events=_NOTABLE_EVENTS, oc_pct=oc_pct, ol_pct=ol_pct,
@@ -1062,8 +1070,8 @@ def api_big_moves():
     bm_df = _get_event_daily_df()
     if bm_df.empty:
         return '<p style="font-size:11px;color:#888">No daily data available.</p>'
-    bm = bm_df[["Open", "High", "Low", "Close"]].copy()
-    bm["chg"]     = (bm["Close"] - bm["Open"]) / bm["Open"] * 100
+    bm = bm_df[["Open", "High", "Low", "Close"]].copy().sort_index()
+    bm["chg"]     = (bm["Close"] / bm["Close"].shift(1) - 1) * 100
     bm["chg_low"] = (bm["Low"]   - bm["Open"]) / bm["Open"] * 100
     bm["date"]    = bm.index.date
     bm["year"]    = bm.index.year
@@ -1150,8 +1158,10 @@ def _stat_pills_html(mean, med, ppos, std, margin_top=24) -> str:
 def _compute_event_impact(daily_df, events):
     if daily_df.empty or not events:
         return pd.DataFrame()
-    oc = (daily_df['Close'] - daily_df['Open']) / daily_df['Open'] * 100
-    ol = (daily_df['Low']   - daily_df['Open']) / daily_df['Open'] * 100
+    daily_sorted = daily_df.sort_index()
+    oc = (daily_sorted['Close'] / daily_sorted['Close'].shift(1) - 1) * 100
+    ol = (daily_sorted['Low']   - daily_sorted['Open']) / daily_sorted['Open'] * 100
+    daily_df = daily_sorted
     trading_days = daily_df.index
 
     def _norm(label):
@@ -1184,9 +1194,9 @@ def _compute_event_impact(daily_df, events):
             Next_OC=("next_oc", "mean"),
         ).reset_index().rename(columns={
             "type": "Event",
-            "Prior_OC": "Prior day O→C",
-            "Evt_OC":   "Event O→C",
-            "Evt_OL":   "Event O→L",
-            "Next_OC":  "Next day O→C",
+            "Prior_OC": "Prior day C→C",
+            "Evt_OC":   "Day of C→C",
+            "Evt_OL":   "Day of O→L",
+            "Next_OC":  "Next day C→C",
         }).sort_values("Count", ascending=False).reset_index(drop=True)
     )

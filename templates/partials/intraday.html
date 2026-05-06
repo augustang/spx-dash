@@ -52,7 +52,7 @@
 {% else %}
 
 {% macro ch_pill(label, pts, pct) %}
-{% set bg   = "#6DF08C" if pts >= 0 else "#FF4646" %}
+{% set bg   = "#13FF98" if pts >= 0 else "#FF4646" %}
 {% set text = "#000"    if pts >= 0 else "#FFF" %}
 {% set arr  = "↑"       if pts >= 0 else "↓" %}
 <div>
@@ -100,7 +100,7 @@
       </div>
       <hr style="border:none;border-top:1px solid var(--bg);margin:16px 0 16px" />
       <div class="row-2col mb-3">
-        {{ ch_pill("Open to close", stats.day_ch_pts, stats.day_ch_pct) }}
+        {{ ch_pill("Prior close", stats.day_ch_pts, stats.day_ch_pct) }}
         {% if stats.gap_pts is not none %}
         {{ ch_pill("Overnight gap", stats.gap_pts, stats.gap_pct) }}
         {% endif %}

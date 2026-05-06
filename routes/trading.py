@@ -226,7 +226,7 @@ def api_metrics():
         vix_last = vix9d_last = 0.0
 
     def _pill(label, pts, pct):
-        bg   = "#6DF08C" if pts >= 0 else "#FF4646"
+        bg   = "#13FF98" if pts >= 0 else "#FF4646"
         text = "#000" if pts >= 0 else "#FFF"
         arr  = "↑" if pts >= 0 else "↓"
         return f'''<div>

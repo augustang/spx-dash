@@ -1,5 +1,5 @@
 {% macro pill(d) %}
-<input type="text" readonly value="{{ d.strftime('%b %-d') }}"
+<input type="text" readonly value="{{ d.strftime('%-m/%-d/%y') }}"
        data-copy="{{ d.strftime('%m/%d/%Y') }}"
        onclick="navigator.clipboard.writeText(this.dataset.copy).then(function(){showToast('Copied date to clipboard')});"
        style="display:block;font-size:12px;color:#444;background:#F1F2F6;

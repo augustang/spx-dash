@@ -1,4 +1,4 @@
-{% set ret_cols = ["Prior day O→C", "Event O→C", "Event O→L", "Next day O→C"] %}
+{% set ret_cols = ["Prior day C→C", "Day of C→C", "Day of O→L", "Next day C→C"] %}
 <div style="overflow-x:auto">
   <table class="table">
     <thead>
@@ -29,5 +29,5 @@
   </table>
 </div>
 <p style="font-size:11px;color:#888;margin-top:16px">
-  Averaged open-to-close · Last {{ years }} years · {{ "{:,}".format(n_days) }} trading days · {{ n_events }} event occurrences
+  Averaged prior close to close · Last {{ years }} years · {{ "{:,}".format(n_days) }} trading days · {{ n_events }} event occurrences
 </p>
