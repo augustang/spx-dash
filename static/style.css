@@ -376,11 +376,41 @@ select.figma-dropdown {
     padding-right: 32px;
 }
 
+/* ── Date pill (key dates / notable events / big moves) ──────────────────── */
+.date-pill {
+    display: block;
+    font-size: 12px;
+    color: #444;
+    background: #F1F2F6;
+    border: none;
+    outline: none;
+    padding: 3px 10px;
+    border-radius: 6px;
+    width: 94px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
 /* ── Disabled condition row ───────────────────────────────────────────────── */
 .row-disabled .figma-dropdown,
 .row-disabled .num-field-input,
 .row-disabled .pill-label { color: rgba(26, 26, 26, 0.4); }
 .row-disabled .icon-btn img { opacity: 0.4; }
+
+/* ── Events legend ────────────────────────────────────────────────────────── */
+.events-legend {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+    margin-bottom: 28px;
+}
+@media (max-width: 768px) {
+    .events-legend {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
 /* ── Spreads grid (Figma-styled) ──────────────────────────────────────────── */
 .spreads-scroll {
     max-height: 350px;
@@ -448,6 +478,7 @@ select.figma-dropdown {
     padding: 6px 8px 10px;
     border-bottom: 1px solid var(--bg);
     text-align: left;
+    vertical-align: top;
 }
 .table td {
     padding: 9px 8px;

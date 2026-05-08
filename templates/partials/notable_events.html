@@ -1,10 +1,9 @@
 {% macro pill(d) %}
 <input type="text" readonly value="{{ d.strftime('%-m/%-d/%y') }}"
+       class="date-pill"
        data-copy="{{ d.strftime('%m/%d/%Y') }}"
        onclick="navigator.clipboard.writeText(this.dataset.copy).then(function(){showToast('Copied date to clipboard')});"
-       style="display:block;font-size:12px;color:#444;background:#F1F2F6;
-              border:none;outline:none;padding:3px 10px;border-radius:6px;
-              margin-bottom:4px;width:94px;cursor:pointer;font-family:inherit;" />
+       style="margin-bottom:4px" />
 {% endmacro %}
 
 {% macro pct_spans(oc, ol) %}
@@ -19,7 +18,7 @@
 {% endmacro %}
 
 <!-- Section legend -->
-<div style="display:flex;gap:28px;align-items:center;margin-bottom:28px">
+<div class="events-legend">
   {% for color, label in [("var(--green-600)","Positive prior close to close"),("#FF3D54","Negative prior close to close"),("#B71AFF","Open to low")] %}
   <span style="display:flex;align-items:center;gap:5px">
     <span style="width:4px;height:4px;border-radius:50%;background:{{ color }};display:inline-block;flex-shrink:0"></span>
@@ -28,7 +27,7 @@
   {% endfor %}
 </div>
 
-<div style="padding:4px 0 4px 16px;width:fit-content">
+<div style="padding:4px 0;width:fit-content">
   {% set by_year = {} %}
   {% for d, label in notable_events %}
     {% if d.year not in by_year %}{% set _ = by_year.update({d.year: []}) %}{% endif %}

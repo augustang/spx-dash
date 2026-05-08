@@ -20,8 +20,8 @@
          hx-trigger="click"
          hx-swap="none"
          onclick="if (this.classList.contains('selected')) { this.classList.remove('selected'); } else { this.parentElement.querySelectorAll('.spreads-row').forEach(r=>r.classList.remove('selected')); this.classList.add('selected'); }">
-      <div>-{{ row.Pts }}</div>
-      <div>-{{ row['(%)'] }}</div>
+      <div>{{ row.Pts }}</div>
+      <div>{{ row['(%)'] }}</div>
       <div>{{ row.Strike }}</div>
       <div>{{ row.Leg }}</div>
       <div>{{ "%.2f"|format(row['Short PX']) }}</div>

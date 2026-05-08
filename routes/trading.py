@@ -303,7 +303,7 @@ def api_spreads():
 
     spreads_list, seen_strikes = [], set()
     if not live_puts_df.empty:
-        for pct in [x / 10.0 for x in range(5, 81)]:
+        for pct in [x / 10.0 for x in range(5, 201)]:
             target_price = spx_last * (1 - pct / 100)
             ci = (live_puts_df['strike'] - target_price).abs().idxmin()
             short = live_puts_df.loc[ci]
@@ -316,18 +316,18 @@ def api_spreads():
             if not long_match.empty:
                 lp = long_match.iloc[0]
                 sp = short['lastPrice'] - lp['lastPrice']
-                if sp > 0:
-                    pts_out = abs(ss - ref)
-                    pct_out = (pts_out / ref) * 100
-                    spreads_list.append({
-                        "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
-                        "Strike": int(ss), "Leg": int(ls),
-                        "Short PX": round(short['lastPrice'], 2),
-                        "Long PX": round(lp['lastPrice'], 2),
-                        "Spread": round(sp, 2),
-                        "Premiums": round(sp * contracts * 100, 0),
-                    })
+                pts_out = ss - ref
+                pct_out = (pts_out / ref) * 100
+                spreads_list.append({
+                    "Pts": int(pts_out), "(%)": f"{pct_out:+.1f}%",
+                    "Strike": int(ss), "Leg": int(ls),
+                    "Short PX": round(short['lastPrice'], 2),
+                    "Long PX": round(lp['lastPrice'], 2),
+                    "Spread": round(sp, 2),
+                    "Premiums": round(sp * contracts * 100, 0),
+                })
 
+    spreads_list.sort(key=lambda r: r['Pts'], reverse=True)
     selected_short = store.get('selected_short')
     if selected_short and not live_puts_df.empty:
         ss = float(selected_short)
@@ -339,18 +339,17 @@ def api_spreads():
                 short = sm.iloc[0]
                 lp = lm.iloc[0]
                 sp = short['lastPrice'] - lp['lastPrice']
-                if sp > 0:
-                    pts_out = abs(ss - ref)
-                    pct_out = (pts_out / ref) * 100
-                    spreads_list.append({
-                        "Pts": int(pts_out), "(%)": f"{pct_out:.1f}%",
-                        "Strike": int(ss), "Leg": int(ls),
-                        "Short PX": round(short['lastPrice'], 2),
-                        "Long PX": round(lp['lastPrice'], 2),
-                        "Spread": round(sp, 2),
-                        "Premiums": round(sp * contracts * 100, 0),
-                    })
-                    spreads_list.sort(key=lambda r: r['Pts'])
+                pts_out = ss - ref
+                pct_out = (pts_out / ref) * 100
+                spreads_list.append({
+                    "Pts": int(pts_out), "(%)": f"{pct_out:+.1f}%",
+                    "Strike": int(ss), "Leg": int(ls),
+                    "Short PX": round(short['lastPrice'], 2),
+                    "Long PX": round(lp['lastPrice'], 2),
+                    "Spread": round(sp, 2),
+                    "Premiums": round(sp * contracts * 100, 0),
+                })
+                spreads_list.sort(key=lambda r: r['Pts'], reverse=True)
 
     return render_template('partials/spreads.html',
         spreads=spreads_list, target=target,
