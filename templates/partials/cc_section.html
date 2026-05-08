@@ -19,7 +19,7 @@
   {% for entry in store.entries %}
   {% set ct = entry.type %}
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
-  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+  <div class="{% if not entry.enabled %}row-disabled{% endif %}" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
     <!-- Condition type -->
     <div style="min-width:180px">
       <p style="font-size:11px;color:#999;margin-bottom:8px">Condition type</p>
@@ -264,6 +264,7 @@
               hx-vals='{"action":"delete","id":"{{ entry.id }}"}'
               hx-target="#cc-section"
               hx-swap="innerHTML"
+              class="row-delete-btn"
               style="height:32px;width:32px;border-radius:8px;border:none;background:var(--bg);color:#1A1A1A;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>
     </div>
   </div>

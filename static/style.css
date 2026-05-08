@@ -376,6 +376,11 @@ select.figma-dropdown {
     padding-right: 32px;
 }
 
+/* ── Disabled condition row ───────────────────────────────────────────────── */
+.row-disabled .figma-dropdown,
+.row-disabled .num-field-input,
+.row-disabled .pill-label { color: rgba(26, 26, 26, 0.4); }
+.row-disabled .icon-btn img { opacity: 0.4; }
 /* ── Spreads grid (Figma-styled) ──────────────────────────────────────────── */
 .spreads-scroll {
     max-height: 350px;
@@ -408,10 +413,16 @@ select.figma-dropdown {
     letter-spacing: -0.02em;
     color: var(--text);
     cursor: default;
-    height: 28px;
-    padding-bottom: 6px;
+    height: auto;
+    min-height: 28px;
+    padding: 4px 6px 6px;
     border-bottom: 1px solid var(--bg);
     border-radius: 0;
+    position: sticky;
+    top: 0;
+    background: var(--white);
+    z-index: 1;
+    align-items: start;
 }
 
 .spreads-row.spreads-header + .spreads-row { margin-top: 6px; }
@@ -561,6 +572,19 @@ input[type="text"][readonly][data-copy]:hover { background: #E4E5EA !important; 
     white-space: nowrap;
     animation: plotly-toast 3.2s ease forwards;
 }
+
+/* persistent updating variant — no auto-fade */
+.spx-toast-updating { animation: none; opacity: 1; }
+
+/* animated dots: appear one at a time */
+@keyframes spx-dot-fade {
+    0%, 60%, 100% { opacity: 0; }
+    30%           { opacity: 1; }
+}
+.spx-dot { opacity: 0; animation: spx-dot-fade 1.4s infinite; }
+.spx-dot:nth-child(1) { animation-delay: 0s;   }
+.spx-dot:nth-child(2) { animation-delay: 0.2s; }
+.spx-dot:nth-child(3) { animation-delay: 0.4s; }
 
 /* ── Loading placeholder ──────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }

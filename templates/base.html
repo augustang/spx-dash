@@ -174,6 +174,25 @@ document.addEventListener('click', function(e) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
+// Delegated save for inputs form — survives HTMX innerHTML swaps on iOS.
+// By the time this fires the stepper has already set triggered-field.value,
+// so source:form naturally includes the correct _triggered value.
+document.addEventListener('change', function(e) {
+  var form = document.getElementById('inputs-form');
+  if (!form || !form.contains(e.target)) return;
+  if (e.target.type === 'hidden') return;
+  // If triggered-field is still empty (direct user interaction, not stepper),
+  // fill it from the input name so the backend knows which field changed.
+  var trig = document.getElementById('triggered-field');
+  if (trig && !trig.value && e.target.name) trig.value = e.target.name;
+  htmx.ajax('POST', '/api/trading/save-inputs', {
+    source: form,
+    target: '#inputs-container',
+    swap: 'innerHTML'
+  });
+  if (trig) trig.value = '';
+});
+
 // Hide Plotly's notifier and show our own custom toast instead.
 (function() {
   new MutationObserver(function(mutations) {
@@ -222,6 +241,82 @@ function showToast(msg) {
 }
 function showZoomToast() { showToast('Double-click to zoom back out'); }
 
+// ── Updating / confirm toast ──────────────────────────────────────────────
+var _confirmTimer  = null;
+var _updatingToast = null;
+
+// Auto-poll and page-load endpoints that should not trigger the toast
+var _SKIP_PATHS = ['/api/trading/metrics', '/api/trading/spreads',
+                   '/api/trading/inputs'];
+
+function _isSkippedRequest(cfg) {
+  var path    = (cfg || {}).path || '';
+  var evtType = cfg.triggeringEvent && cfg.triggeringEvent.type;
+  if (evtType === 'load') return true;
+  return _SKIP_PATHS.some(function(p) { return path.indexOf(p) !== -1; });
+}
+
+function _showUpdatingToast() {
+  if (_confirmTimer) { clearTimeout(_confirmTimer); _confirmTimer = null; }
+  // Already visible — leave it, no re-animation
+  if (_updatingToast && document.body.contains(_updatingToast)) return;
+  // Remove any existing toast (e.g. zoom toast)
+  var ex = document.querySelector('.spx-toast');
+  if (ex) ex.parentNode.removeChild(ex);
+  _updatingToast = document.createElement('div');
+  _updatingToast.className = 'spx-toast spx-toast-updating';
+  _updatingToast.innerHTML =
+    '<span class="spx-toast-inner">' +
+    'Updating results<span style="display:inline-block;width:4px"></span>' +
+    '<span class="spx-dot">.</span>' +
+    '<span class="spx-dot">.</span>' +
+    '<span class="spx-dot">.</span>' +
+    '</span>';
+  document.body.appendChild(_updatingToast);
+}
+
+function _showConfirmToast() {
+  if (!_updatingToast || !document.body.contains(_updatingToast)) {
+    _updatingToast = null;
+    return;
+  }
+  var toast = _updatingToast;
+  _updatingToast = null;
+  var inner = toast.querySelector('.spx-toast-inner');
+  if (!inner) return;
+  // Fade out only the inner content, container stays put
+  inner.style.transition = 'opacity 0.15s ease';
+  inner.style.opacity = '0';
+  setTimeout(function() {
+    if (!document.body.contains(toast)) return;
+    inner.innerHTML = 'Changes applied<span style="display:inline-block;width:4px"></span><img src="/static/icons/Interface/Check.svg" width="13" height="13" style="vertical-align:middle;margin-top:-1px">';
+    inner.style.opacity = '1';
+    // Dismiss whole container after 2s
+    setTimeout(function() {
+      toast.style.transition = 'opacity 0.2s ease';
+      toast.style.opacity = '0';
+      setTimeout(function() {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 200);
+    }, 2000);
+  }, 150);
+}
+
+// Debounce: show on any user-triggered beforeRequest; start 400ms settle
+// timer on afterSettle. Aborted requests (hx-sync replace) simply never
+// fire afterSettle, so they can't accidentally trigger confirm.
+document.addEventListener('htmx:beforeRequest', function(e) {
+  if (_isSkippedRequest(e.detail.requestConfig)) return;
+  _showUpdatingToast();
+});
+
+document.addEventListener('htmx:afterSettle', function(e) {
+  if (_isSkippedRequest(e.detail.requestConfig)) return;
+  if (!_updatingToast || !document.body.contains(_updatingToast)) return;
+  if (_confirmTimer) clearTimeout(_confirmTimer);
+  _confirmTimer = setTimeout(_showConfirmToast, 400);
+});
+
 // Cache of rendered chart elements keyed by ID. When htmx swaps a section,
 // the old element (with Plotly hover state intact) is detached from DOM but
 // still referenced here. On re-render we restore it and call Plotly.react
@@ -245,7 +340,15 @@ function _renderPlotlyEl(el) {
   var cached = _plotCache[el.id];
   if (cached && cached !== el && cached._fullLayout && !document.body.contains(cached)) {
     if (el.parentNode) el.parentNode.replaceChild(cached, el);
-    cached.dataset.plotly = el.dataset.plotly;
+    // Sync all chart-relevant data attributes so strike pills and event
+    // labels always reflect the freshly rendered element (not stale cache).
+    ['plotly', 'short', 'long', 'events'].forEach(function(key) {
+      if (el.dataset[key] !== undefined) {
+        cached.dataset[key] = el.dataset[key];
+      } else {
+        delete cached.dataset[key];
+      }
+    });
     el = cached;
   }
   if (!document.body.contains(el)) return;

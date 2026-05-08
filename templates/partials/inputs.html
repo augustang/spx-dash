@@ -12,12 +12,7 @@
       <label class="field-label">Buying power ($)</label>
       <div class="num-field-row">
         <input id="input-bp" name="bp" type="number" value="{{ saved_bp|int }}"
-               class="num-field-input"
-               hx-post="/api/trading/save-inputs"
-               hx-trigger="change"
-               hx-include="closest form"
-               hx-target="#inputs-container"
-               hx-vals='js:{_triggered: "bp"}' />
+               class="num-field-input" />
         <div class="icon-btn-group">
           <button type="button" class="icon-btn" data-field="input-bp" data-dir="-10000" data-name="bp">
             <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
@@ -31,12 +26,7 @@
     <div>
       <label class="field-label">Spread width</label>
       <select name="sw" id="input-spread-width"
-              class="figma-dropdown"
-              hx-post="/api/trading/save-inputs"
-              hx-trigger="change"
-              hx-include="closest form"
-              hx-target="#inputs-container"
-              hx-vals='js:{_triggered: "sw"}'>
+              class="figma-dropdown">
         {% for w in [10, 25, 50, 100] %}
         <option value="{{ w }}" {% if w == saved_spread|int %}selected{% endif %}>{{ w }}</option>
         {% endfor %}
@@ -50,12 +40,7 @@
       <label class="field-label">Contracts</label>
       <div class="num-field-row">
         <input id="input-contracts" name="contracts" type="number" value="{{ saved_contracts|int }}"
-               class="num-field-input"
-               hx-post="/api/trading/save-inputs"
-               hx-trigger="change"
-               hx-include="closest form"
-               hx-target="#inputs-container"
-               hx-vals='js:{_triggered: "contracts"}' />
+               class="num-field-input" />
         <div class="icon-btn-group">
           <button type="button" class="icon-btn" data-field="input-contracts" data-dir="-1" data-name="contracts">
             <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
@@ -70,12 +55,7 @@
       <label class="field-label">Target profit ($)</label>
       <div class="num-field-row">
         <input id="input-target" name="target" type="number" value="{{ saved_target|int }}"
-               class="num-field-input"
-               hx-post="/api/trading/save-inputs"
-               hx-trigger="change"
-               hx-include="closest form"
-               hx-target="#inputs-container"
-               hx-vals='js:{_triggered: "target"}' />
+               class="num-field-input" />
         <div class="icon-btn-group">
           <button type="button" class="icon-btn" data-field="input-target" data-dir="-100" data-name="target">
             <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
