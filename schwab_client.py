@@ -5,18 +5,18 @@ import os
 
 import gist_sync
 
-TOKEN_PATH = '.streamlit/schwab_tokens.json'
+TOKEN_PATH = '.schwab/schwab_tokens.json'
 
 
 def _schwab_keys():
-    """Return (APP_KEY, APP_SECRET) from env vars or .streamlit/secrets.toml fallback."""
+    """Return (APP_KEY, APP_SECRET) from env vars or .schwab/secrets.toml fallback."""
     key = os.environ.get("SCHWAB_APP_KEY")
     secret = os.environ.get("SCHWAB_APP_SECRET")
     if key and secret:
         return key, secret
 
-    # Local dev fallback: parse .streamlit/secrets.toml
-    secrets_path = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
+    # Local dev fallback: parse .schwab/secrets.toml
+    secrets_path = os.path.join(os.path.dirname(__file__), ".schwab", "secrets.toml")
     if os.path.exists(secrets_path):
         with open(secrets_path) as f:
             for line in f:

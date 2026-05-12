@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Token bootstrap (Render / any host without persistent disk) ─────────────
-_token_path = '.streamlit/schwab_tokens.json'
+_token_path = '.schwab/schwab_tokens.json'
 if not os.path.exists(_token_path):
-    os.makedirs('.streamlit', exist_ok=True)
+    os.makedirs('.schwab', exist_ok=True)
     import gist_sync
     _gist_id  = os.environ.get("GIST_ID")
     _gist_tok = os.environ.get("GITHUB_GIST_TOKEN")

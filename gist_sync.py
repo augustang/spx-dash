@@ -1,6 +1,6 @@
 """
 Read/write schwab_tokens.json to a private GitHub Gist so that
-Streamlit Cloud always has the latest tokens without manual paste.
+the Render deployment always has the latest tokens without manual paste.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _load_gist_config():
 
     # Fall back to reading secrets.toml directly (for CLI scripts)
     secrets_path = os.path.join(
-        os.path.dirname(__file__), ".streamlit", "secrets.toml"
+        os.path.dirname(__file__), ".schwab", "secrets.toml"
     )
     if os.path.exists(secrets_path):
         with open(secrets_path, "r") as f:
@@ -34,7 +34,7 @@ def _load_gist_config():
     return gist_id, github_token
 
 
-def push_tokens_to_gist(tokens: dict, use_streamlit=False) -> bool:
+def push_tokens_to_gist(tokens: dict) -> bool:
     """Upload token dict to the private gist. Returns True on success."""
     gist_id, github_token = _load_gist_config()
     if not gist_id or not github_token:
@@ -58,7 +58,7 @@ def push_tokens_to_gist(tokens: dict, use_streamlit=False) -> bool:
         return False
 
 
-def fetch_tokens_from_gist(use_streamlit=False) -> dict | None:
+def fetch_tokens_from_gist() -> dict | None:
     """Download the latest token dict from the private gist."""
     gist_id, github_token = _load_gist_config()
     if not gist_id or not github_token:

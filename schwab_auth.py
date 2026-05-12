@@ -12,7 +12,8 @@ What it does:
     2. Starts a tiny local HTTPS server to capture the OAuth callback.
        (Falls back to manual paste if the port is unavailable.)
     3. Exchanges the auth code for tokens.
-    4. Saves tokens locally AND pushes them to your private GitHub Gist.
+    4. Saves tokens locally to .schwab/schwab_tokens.json and pushes them to GitHub Gist.
+       The Render deployment pulls tokens from Gist on startup.
 """
 from __future__ import annotations
 
@@ -34,9 +35,9 @@ import gist_sync
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-SECRETS_PATH = os.path.join(os.path.dirname(__file__), ".streamlit", "secrets.toml")
-TOKEN_PATH = os.path.join(os.path.dirname(__file__), ".streamlit", "schwab_tokens.json")
-CERT_DIR = os.path.join(os.path.dirname(__file__), ".streamlit", "certs")
+SECRETS_PATH = os.path.join(os.path.dirname(__file__), ".schwab", "secrets.toml")
+TOKEN_PATH = os.path.join(os.path.dirname(__file__), ".schwab", "schwab_tokens.json")
+CERT_DIR = os.path.join(os.path.dirname(__file__), ".schwab", "certs")
 CERT_FILE = os.path.join(CERT_DIR, "server-cert.pem")
 KEY_FILE = os.path.join(CERT_DIR, "server-key.pem")
 
@@ -234,12 +235,12 @@ def main():
     os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
     with open(TOKEN_PATH, "w") as f:
         json.dump(tokens, f)
-    print("✅ Tokens saved to .streamlit/schwab_tokens.json")
+    print(f"✅ Tokens saved to {TOKEN_PATH}")
 
     # --- Step 5: Push to gist ---
     gist_sync.push_tokens_to_gist(tokens)
 
-    print("\n🎉 Done! Your Streamlit Cloud app will pick up the new tokens automatically.")
+    print("\n🎉 Done! Tokens saved locally and pushed to Gist. The dashboard will pick them up automatically.")
 
 
 if __name__ == "__main__":
