@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, request, session, jsonify, make_re
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart, GREEN_400, GREEN_600
+from shared.chart import create_spx_chart, empty_figure, GREEN_400, GREEN_600
 from shared.events import get_financial_events
 
 _ET = pytz.timezone("America/New_York")
@@ -437,7 +437,7 @@ def api_day_chart():
     selected_long  = store.get("selected_long")
 
     if df.empty:
-        fig = go.Figure()
+        fig = empty_figure()
     else:
         fig = create_spx_chart(
             period_label, df['Close'], df.index, color, halo,
@@ -460,7 +460,7 @@ def api_month_chart():
     spx_last, spx_open, _, _ = get_spx_metrics()
 
     if df.empty:
-        return _chart_html('month-chart', go.Figure())
+        return _chart_html('month-chart', empty_figure())
 
     now_ts = pd.Timestamp.now('America/New_York').tz_localize(None).normalize()
     if now_ts not in df.index:

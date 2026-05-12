@@ -26,6 +26,34 @@ _AXIS_STYLE = dict(
 )
 
 
+def empty_figure(height: int = 420) -> go.Figure:
+    """Return a blank, correctly styled figure for use when data is unavailable."""
+    fig = go.Figure()
+    fig.update_layout(
+        height=height,
+        margin=dict(l=4, r=4, t=12, b=30),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Inter, sans-serif"),
+        hovermode=False,
+        xaxis=dict(
+            **_AXIS_STYLE,
+            showticklabels=False,
+            showgrid=True,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            **_AXIS_STYLE,
+            showticklabels=False,
+            showgrid=True,
+            zeroline=False,
+            automargin=True,
+            side="left",
+        ),
+    )
+    return fig
+
+
 def create_long_chart(
     prices,
     dates,

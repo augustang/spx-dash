@@ -34,7 +34,7 @@ from flask import Blueprint, render_template, request, session
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart, create_long_chart, _HOVERLABEL, GREEN_400, GREEN_600
+from shared.chart import create_spx_chart, create_long_chart, empty_figure, _HOVERLABEL, GREEN_400, GREEN_600
 from shared.events import FOMC_DATES, get_financial_events
 
 study_bp = Blueprint('study', __name__)
@@ -406,7 +406,7 @@ def _build_long_chart_html(selected_range: str, show_events: bool, show_line: bo
     years   = range_params.get(selected_range, 1)
     df_long = get_spx_daily(years)
     if df_long.empty:
-        return _chart_html('study-long-chart', go.Figure(), evt_payload=None)
+        return _chart_html('study-long-chart', empty_figure(), evt_payload=None)
     last_close = float(df_long['Close'].iloc[-1])
     first_open = float(df_long['Open'].iloc[0])
     is_down    = (last_close - first_open) < 0
