@@ -249,6 +249,11 @@ var _updatingToast = null;
 var _SKIP_PATHS = ['/api/trading/metrics', '/api/trading/spreads',
                    '/api/trading/inputs'];
 
+// Endpoints that auto-poll (every Ns) — show "Refreshing data..." when
+// triggered by HTMX's internal timer (triggeringEvent is null/undefined)
+var _POLL_PATHS = ['/api/trading/trade', '/api/trading/day-chart',
+                   '/api/trading/month-chart'];
+
 function _isSkippedRequest(cfg) {
   var path    = (cfg || {}).path || '';
   var evtType = cfg.triggeringEvent && cfg.triggeringEvent.type;
@@ -256,18 +261,26 @@ function _isSkippedRequest(cfg) {
   return _SKIP_PATHS.some(function(p) { return path.indexOf(p) !== -1; });
 }
 
-function _showUpdatingToast() {
+function _isAutoRefresh(cfg) {
+  var path = (cfg || {}).path || '';
+  if (!_POLL_PATHS.some(function(p) { return path.indexOf(p) !== -1; })) return false;
+  // Auto-poll fires with no triggering event; user/custom events always have one
+  return !cfg.triggeringEvent;
+}
+
+function _showUpdatingToast(label) {
   if (_confirmTimer) { clearTimeout(_confirmTimer); _confirmTimer = null; }
   // Already visible — leave it, no re-animation
   if (_updatingToast && document.body.contains(_updatingToast)) return;
   // Remove any existing toast (e.g. zoom toast)
   var ex = document.querySelector('.spx-toast');
   if (ex) ex.parentNode.removeChild(ex);
+  var msg = label || 'Updating results';
   _updatingToast = document.createElement('div');
   _updatingToast.className = 'spx-toast spx-toast-updating';
   _updatingToast.innerHTML =
     '<span class="spx-toast-inner">' +
-    'Updating results<span style="display:inline-block;width:4px"></span>' +
+    msg + '<span style="display:inline-block;width:4px"></span>' +
     '<span class="spx-dot">.</span>' +
     '<span class="spx-dot">.</span>' +
     '<span class="spx-dot">.</span>' +
@@ -306,8 +319,9 @@ function _showConfirmToast() {
 // timer on afterSettle. Aborted requests (hx-sync replace) simply never
 // fire afterSettle, so they can't accidentally trigger confirm.
 document.addEventListener('htmx:beforeRequest', function(e) {
-  if (_isSkippedRequest(e.detail.requestConfig)) return;
-  _showUpdatingToast();
+  var cfg = e.detail.requestConfig;
+  if (_isSkippedRequest(cfg)) return;
+  _showUpdatingToast(_isAutoRefresh(cfg) ? 'Refreshing data' : 'Updating results');
 });
 
 document.addEventListener('htmx:afterSettle', function(e) {
