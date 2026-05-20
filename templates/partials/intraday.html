@@ -2,13 +2,15 @@
 <div style="margin-bottom:20px;position:relative;display:table">
   <input type="date" name="date" id="intraday-date"
          data-flatpickr
+         size="12"
          value="{{ date_str }}"
          min="{{ min_date }}"
          max="{{ today }}"
          style="font-size:13px;border:none;outline:none;box-shadow:none;
-                padding:0 22px 0 10px;height:32px;line-height:32px;
+                padding:0 26px 0 10px;height:32px;line-height:32px;
                 background:var(--bg);border-radius:8px;font-family:inherit;
                 color:#1A1A1A;display:block;box-sizing:border-box;
+                width:auto;
                 -webkit-appearance:none;appearance:none;cursor:pointer;" />
   <img src="/static/icons/Calendar/Calendar.svg" width="14" height="14"
        style="position:absolute;right:8px;top:50%;transform:translateY(-50%);pointer-events:none" />
@@ -97,7 +99,7 @@
           <p class="metric-value">{{ "{:,.2f}".format(stats.low) }}</p>
         </div>
       </div>
-      <hr style="border:none;border-top:1px solid var(--bg);margin:16px 0 16px" />
+      <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 16px" />
       <div class="row-2col mb-3">
         {{ ch_pill("Prior close", stats.day_ch_pts, stats.day_ch_pct) }}
         {% if stats.gap_pts is not none %}

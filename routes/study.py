@@ -1030,7 +1030,12 @@ def api_event_impact():
 
 @study_bp.route('/api/study/key-dates')
 def api_key_dates():
-    kd_events = get_financial_events(datetime.date(2019, 1, 1), datetime.date.today())
+    # Extend through the end of the current year so future-but-scheduled
+    # events (e.g. 2026 Thanksgiving/Xmas/NYE, remaining OPEX/VIX/FOMC days)
+    # show up in their year column and the section's columns stay aligned.
+    today_ = datetime.date.today()
+    end_of_year = datetime.date(today_.year, 12, 31)
+    kd_events = get_financial_events(datetime.date(2019, 1, 1), end_of_year)
     kd_grouped: dict[str, list[datetime.date]] = {}
     for d, lbl in kd_events:
         key = "OPEX" if "OPEX" in lbl else lbl
@@ -1039,7 +1044,7 @@ def api_key_dates():
     kd_by_year: dict[str, dict[int, list[datetime.date]]] = {}
     for key, dates in kd_grouped.items():
         by_year: dict[int, list[datetime.date]] = {}
-        for d in sorted(dates, reverse=True):
+        for d in sorted(dates):
             by_year.setdefault(d.year, []).append(d)
         kd_by_year[key] = by_year
     return render_template('partials/key_dates.html', grouped=kd_grouped, by_year=kd_by_year)

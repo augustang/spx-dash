@@ -27,7 +27,7 @@
   {% endfor %}
 </div>
 
-<div style="padding:4px 0;width:fit-content">
+<div style="padding:4px 0">
   {% set by_year = {} %}
   {% for d, label in notable_events %}
     {% if d.year not in by_year %}{% set _ = by_year.update({d.year: []}) %}{% endif %}
@@ -35,7 +35,7 @@
   {% endfor %}
   <div style="display:flex;flex-wrap:wrap;gap:24px">
     {% for yr in all_years %}
-    <div style="min-width:120px">
+    <div style="flex:1 1 98px;min-width:98px">
       <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
       {% for d, lbl in (by_year.get(yr) or []) | sort %}
       <div style="margin-bottom:22px">

@@ -16,10 +16,10 @@
   {% endfor %}
 </div>
 
-<div style="padding:4px 0;width:fit-content">
+<div style="padding:4px 0">
   <div style="display:flex;flex-wrap:wrap;gap:24px">
     {% for yr, items in bm_by_year.items() %}
-    <div style="min-width:120px">
+    <div style="flex:1 1 98px;min-width:98px">
       <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
       {% for d, chg, chg_low in items %}
       {% set note = intraday_notes.get(d.strftime('%Y-%m-%d')) %}

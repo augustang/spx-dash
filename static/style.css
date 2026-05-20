@@ -381,12 +381,13 @@ select.figma-dropdown {
     display: block;
     font-size: 12px;
     color: #444;
-    background: #F1F2F6;
+    background: var(--bg);
     border: none;
     outline: none;
-    padding: 3px 10px;
+    padding: 0 10px;
+    height: 32px;
     border-radius: 6px;
-    width: 110px;
+    width: 98px;
     cursor: pointer;
     font-family: inherit;
 }
@@ -446,7 +447,7 @@ select.figma-dropdown {
     height: auto;
     min-height: 28px;
     padding: 4px 6px 6px;
-    border-bottom: 1px solid var(--bg);
+    border-bottom: 1px solid #EBEBEB;
     border-radius: 0;
     position: sticky;
     top: 0;
@@ -476,7 +477,7 @@ select.figma-dropdown {
     font-size: 11px;
     letter-spacing: -0.02em;
     padding: 6px 8px 10px;
-    border-bottom: 1px solid var(--bg);
+    border-bottom: 1px solid #EBEBEB;
     text-align: left;
     vertical-align: top;
 }
@@ -484,7 +485,7 @@ select.figma-dropdown {
     padding: 9px 8px;
     vertical-align: middle;
 }
-.table tr + tr td { border-top: 1px solid var(--bg); }
+.table tr + tr td { border-top: 1px solid #EBEBEB; }
 .table td:first-child,
 .table th:first-child { padding-left: 0; }
 
@@ -572,7 +573,7 @@ select.figma-dropdown {
 .bm-note-wrap:hover .bm-note-tip { display: block; }
 
 /* ── Date pill hover ──────────────────────────────────────────────────────── */
-input[type="text"][readonly][data-copy]:hover { background: #E4E5EA !important; }
+input[type="text"][readonly][data-copy]:hover { background: #EBE9E1 !important; }
 
 
 /* ── Custom toast notification ────────────────────────────────────────────── */

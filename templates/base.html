@@ -410,6 +410,7 @@ function _initFlatpickrs(root) {
     if (el._flatpickr) return;
     var origClass = el.className || '';
     var origStyle = el.getAttribute('style') || '';
+    var origSize  = el.getAttribute('size');
     var fp = flatpickr(el, {
       dateFormat: "Y-m-d",
       altInput: true,
@@ -417,8 +418,9 @@ function _initFlatpickrs(root) {
       altFormat: "M j, Y",
       allowInput: true,
     });
-    if (fp && fp.altInput && origStyle) {
-      fp.altInput.setAttribute('style', origStyle);
+    if (fp && fp.altInput) {
+      if (origStyle) fp.altInput.setAttribute('style', origStyle);
+      if (origSize)  fp.altInput.setAttribute('size', origSize);
     }
   });
 }

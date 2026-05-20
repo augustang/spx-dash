@@ -3,18 +3,19 @@
        class="date-pill"
        data-copy="{{ d.strftime('%b %-d, %Y') }}"
        onclick="navigator.clipboard.writeText(this.dataset.copy).then(function(){showToast('Copied date to clipboard')});"
-       style="margin-bottom:6px" />
+       style="margin-bottom:10px" />
 {% endmacro %}
 
-<div style="padding:4px 0;width:fit-content">
+<div style="padding:4px 0">
   {% for key, label in [("OPEX","OPEX (3rd Friday)"),("VIX Exp","VIX Expiration"),("FOMC","FOMC Day")] %}
   {% set yr_data = by_year.get(key, {}) %}
   {% if yr_data %}
   <div style="margin-bottom:24px">
-    <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ label }}</p>
+    <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 16px 0">{{ label }}</p>
+    <hr style="border:none;border-top:1px solid #EBEBEB;margin:0 0 16px 0" />
     <div style="display:flex;flex-wrap:wrap;gap:24px">
       {% for yr in yr_data.keys() | sort(reverse=True) %}
-      <div style="min-width:120px">
+      <div style="flex:1 1 98px;min-width:98px">
         <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
         {% for d in yr_data[yr] %}{{ pill(d) }}{% endfor %}
       </div>
@@ -24,24 +25,21 @@
   {% endif %}
   {% endfor %}
 
+  {% for key, label in [("Thanksgiving","Thanksgiving"),("Xmas","Christmas"),("NYE","New Year's Eve")] %}
+  {% set yr_data = by_year.get(key, {}) %}
+  {% if yr_data %}
   <div style="margin-bottom:24px">
+    <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 16px 0">{{ label }}</p>
+    <hr style="border:none;border-top:1px solid #EBEBEB;margin:0 0 16px 0" />
     <div style="display:flex;flex-wrap:wrap;gap:24px">
-      {% for key, label in [("Thanksgiving","Thanksgiving"),("Xmas","Christmas"),("NYE","New Year's Eve")] %}
-      {% set yr_data = by_year.get(key, {}) %}
-      {% if yr_data %}
-      <div>
-        <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ label }}</p>
-        <div style="display:flex;flex-wrap:wrap;gap:24px">
-          {% for yr in yr_data.keys() | sort(reverse=True) %}
-          <div style="min-width:120px">
-            <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
-            {% for d in yr_data[yr] %}{{ pill(d) }}{% endfor %}
-          </div>
-          {% endfor %}
-        </div>
+      {% for yr in yr_data.keys() | sort(reverse=True) %}
+      <div style="flex:1 1 98px;min-width:98px">
+        <p style="font-size:12px;font-weight:600;color:#1A1A1A;margin:0 0 10px 0">{{ yr }}</p>
+        {% for d in yr_data[yr] %}{{ pill(d) }}{% endfor %}
       </div>
-      {% endif %}
       {% endfor %}
     </div>
   </div>
+  {% endif %}
+  {% endfor %}
 </div>
