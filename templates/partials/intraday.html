@@ -1,6 +1,7 @@
 {% macro date_input() %}
 <div style="margin-bottom:20px;position:relative;display:table">
   <input type="date" name="date" id="intraday-date"
+         data-flatpickr
          value="{{ date_str }}"
          min="{{ min_date }}"
          max="{{ today }}"
@@ -9,7 +10,6 @@
                 background:var(--bg);border-radius:8px;font-family:inherit;
                 color:#1A1A1A;display:block;box-sizing:border-box;
                 -webkit-appearance:none;appearance:none;cursor:pointer;" />
-  <style>#intraday-date::-webkit-calendar-picker-indicator { opacity:0; position:absolute; width:100%; cursor:pointer; }</style>
   <img src="/static/icons/Calendar/Calendar.svg" width="14" height="14"
        style="position:absolute;right:8px;top:50%;transform:translateY(-50%);pointer-events:none" />
 </div>

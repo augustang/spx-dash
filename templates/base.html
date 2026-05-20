@@ -6,8 +6,10 @@
   <title>{% block title %}SPX Dashboard{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
   <script src="https://cdn.plot.ly/plotly-2.35.3.min.js" defer></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13" defer></script>
 </head>
 <body>
 
@@ -397,6 +399,31 @@ document.addEventListener('change', function(e) {
     });
   }
 });
+
+// Initialise flatpickr on any input marked with [data-flatpickr]. Re-runs after
+// every HTMX swap so newly-rendered date fields get the picker too. altInput
+// keeps the underlying value as ISO YYYY-MM-DD (which the backend expects)
+// while showing "Mar 20, 2026" to the user.
+function _initFlatpickrs(root) {
+  if (typeof flatpickr === 'undefined') return;
+  (root || document).querySelectorAll('input[data-flatpickr]').forEach(function(el) {
+    if (el._flatpickr) return;
+    var origClass = el.className || '';
+    var origStyle = el.getAttribute('style') || '';
+    var fp = flatpickr(el, {
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altInputClass: origClass,
+      altFormat: "M j, Y",
+      allowInput: true,
+    });
+    if (fp && fp.altInput && origStyle) {
+      fp.altInput.setAttribute('style', origStyle);
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', function() { _initFlatpickrs(document); });
+document.body.addEventListener('htmx:afterSwap', function(e) { _initFlatpickrs(e.detail.target); });
 </script>
 
 </body>

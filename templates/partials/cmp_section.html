@@ -60,6 +60,7 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Date</p>
       <input type="date" value="{{ entry.date }}"
              class="figma-dropdown"
+             data-flatpickr
              hx-post="/api/study/cmp"
              hx-vals='{"action":"update","id":"{{ entry.id }}","field":"date"}'
              hx-trigger="change"
