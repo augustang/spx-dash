@@ -10,6 +10,15 @@ import plotly.graph_objects as go
 GREEN_400 = "#13FF98"  # bright green — bars, lines, backgrounds
 GREEN_600 = "#00D679"  # darker green — standalone text only
 
+
+def _fmt_date(d) -> str:
+    """Format a date/timestamp as 'Mon D, YYYY' without zero-padding.
+
+    Avoids the %-d strftime flag which is a Linux glibc extension and can
+    raise ValueError on some Python builds / platforms.
+    """
+    return f"{d.strftime('%b')} {d.day}, {d.year}"
+
 # ── Shared hover / axis styles ────────────────────────────────────────────────
 _HOVERLABEL = dict(
     bgcolor="rgba(255,255,255,0.92)",
@@ -76,7 +85,7 @@ def create_long_chart(
     # ── Price trace ───────────────────────────────────────────────────────────
     if ohlc_df is not None:
         hover_texts = [
-            f"{d.strftime('%b %-d, %Y')}<br>"
+            f"{_fmt_date(d)}<br>"
             f"O: {o:,.2f}  H: {h:,.2f}  L: {l:,.2f}  C: {c:,.2f}"
             for d, o, h, l, c in zip(
                 ohlc_df.index,
@@ -193,7 +202,7 @@ def create_spx_chart(
 
     if ohlc_df is not None:
         hover_texts = [
-            f"{d.strftime('%b %-d, %Y')}<br>Open: {o:,.2f}<br>High: {h:,.2f}<br>Low: {l:,.2f}<br>Close: {c:,.2f}"
+            f"{_fmt_date(d)}<br>Open: {o:,.2f}<br>High: {h:,.2f}<br>Low: {l:,.2f}<br>Close: {c:,.2f}"
             for d, o, h, l, c in zip(ohlc_df.index, ohlc_df['Open'], ohlc_df['High'], ohlc_df['Low'], ohlc_df['Close'])
         ]
         fig.add_trace(go.Candlestick(

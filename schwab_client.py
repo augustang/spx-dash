@@ -69,7 +69,7 @@ def refresh_access_token():
         'refresh_token': tokens['refresh_token']
     }
 
-    response = requests.post('https://api.schwabapi.com/v1/oauth/token', headers=headers, data=payload)
+    response = requests.post('https://api.schwabapi.com/v1/oauth/token', headers=headers, data=payload, timeout=(5, 30))
 
     if response.status_code == 200:
         new_tokens = response.json()
@@ -103,14 +103,14 @@ def fetch_market_hours():
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
     params = {"markets": "equity", "date": today}
 
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
 
     if response.status_code == 401:
         new_token = refresh_access_token()
         if new_token is None:
             return None
         headers["Authorization"] = f"Bearer {new_token}"
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
 
     if response.status_code != 200:
         return None
@@ -136,14 +136,14 @@ def fetch_live_quote(symbol="$SPX"):
     url = "https://api.schwabapi.com/marketdata/v1/quotes"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
 
-    response = requests.get(url, headers=headers, params={"symbols": symbol})
+    response = requests.get(url, headers=headers, params={"symbols": symbol}, timeout=(5, 30))
 
     if response.status_code == 401:
         new_token = refresh_access_token()
         if new_token is None:
             return None
         headers["Authorization"] = f"Bearer {new_token}"
-        response = requests.get(url, headers=headers, params={"symbols": symbol})
+        response = requests.get(url, headers=headers, params={"symbols": symbol}, timeout=(5, 30))
 
     if response.status_code == 200:
         data = response.json()
@@ -180,13 +180,13 @@ def fetch_price_history(symbol="$SPX", period_type="day", period=1, freq_type="m
     else:
         params["period"] = period
 
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
     if response.status_code == 401:
         new_token = refresh_access_token()
         if new_token is None:
             return None
         headers["Authorization"] = f"Bearer {new_token}"
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
 
     if response.status_code == 200:
         return response.json()
@@ -212,13 +212,13 @@ def fetch_options_chain(symbol="$SPX"):
         "daysToExpiration": 1
     }
 
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
     if response.status_code == 401:
         new_token = refresh_access_token()
         if new_token is None:
             return None
         headers["Authorization"] = f"Bearer {new_token}"
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
 
     if response.status_code == 200:
         return response.json()

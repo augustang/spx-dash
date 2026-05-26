@@ -48,6 +48,7 @@ def push_tokens_to_gist(tokens: dict) -> bool:
             "Accept": "application/vnd.github+json",
         },
         json={"files": {GIST_FILENAME: {"content": json.dumps(tokens)}}},
+        timeout=(5, 30),
     )
 
     if resp.status_code == 200:
@@ -70,6 +71,7 @@ def fetch_tokens_from_gist() -> dict | None:
             "Authorization": f"Bearer {github_token}",
             "Accept": "application/vnd.github+json",
         },
+        timeout=(5, 30),
     )
 
     if resp.status_code == 200:
@@ -92,6 +94,7 @@ def create_gist(tokens: dict, github_token: str) -> str | None:
             "public": False,
             "files": {GIST_FILENAME: {"content": json.dumps(tokens)}},
         },
+        timeout=(5, 30),
     )
     if resp.status_code == 201:
         return resp.json()["id"]

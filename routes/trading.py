@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, request, session, jsonify, make_re
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart, empty_figure, GREEN_400, GREEN_600
+from shared.chart import create_spx_chart, empty_figure, GREEN_400, GREEN_600, _fmt_date
 from shared.events import get_financial_events
 
 _ET = pytz.timezone("America/New_York")
@@ -168,7 +168,7 @@ def _build_header_ctx():
     import pytz
     eastern = pytz.timezone('America/New_York')
     now = datetime.datetime.now(eastern)
-    date_str = now.strftime("%A %B %-d, %Y")
+    date_str = f"{now.strftime('%A %B')} {now.day}, {now.year}"
     parts = date_str.split(' ')
     time_str = now.strftime("%H:%M")
     try:

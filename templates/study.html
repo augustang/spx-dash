@@ -156,6 +156,36 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
   if (target && target.id === 'long-chart-container') {
     target.innerHTML = '<div class="loading-placeholder" style="height:500px">Loading\u2026</div>';
   }
+  // Dim the CC section while a request is in flight so users get feedback.
+  if (target && target.id === 'cc-section') {
+    target.style.opacity = '0.45';
+    target.style.pointerEvents = 'none';
+  }
 });
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  var target = e.detail.target;
+  if (target && target.id === 'cc-section') {
+    target.style.opacity = '';
+    target.style.pointerEvents = '';
+  }
+});
+
+// Abort in-flight CC requests when a newer one starts to prevent pile-up
+// from rapid stepper clicks or filter changes.
+(function() {
+  var _ccXhr = null;
+  document.body.addEventListener('htmx:beforeRequest', function(e) {
+    if (e.detail.target && e.detail.target.id === 'cc-section') {
+      if (_ccXhr) { try { _ccXhr.abort(); } catch(_) {} }
+      _ccXhr = e.detail.xhr || null;
+    }
+  });
+  document.body.addEventListener('htmx:afterRequest', function(e) {
+    if (e.detail.target && e.detail.target.id === 'cc-section') {
+      _ccXhr = null;
+    }
+  });
+})();
 </script>
 {% endblock %}

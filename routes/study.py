@@ -34,7 +34,7 @@ from flask import Blueprint, render_template, request, session
 
 import schwab_client
 from shared.cache import cache
-from shared.chart import create_spx_chart, create_long_chart, empty_figure, _HOVERLABEL, GREEN_400, GREEN_600
+from shared.chart import create_spx_chart, create_long_chart, empty_figure, _HOVERLABEL, GREEN_400, GREEN_600, _fmt_date
 from shared.events import FOMC_DATES, get_financial_events
 
 study_bp = Blueprint('study', __name__)
@@ -166,6 +166,8 @@ def _append_to_archive(df: pd.DataFrame) -> None:
         combined.to_csv(_FRD_5MIN_PATH)
     else:
         df_out.to_csv(_FRD_5MIN_PATH)
+    cache.delete_memoized(_load_frd_5min)
+    cache.delete_memoized(_build_daily_snapshots)
 
 
 @cache.memoize(timeout=86400)
@@ -326,7 +328,7 @@ def _build_header_ctx():
     import pytz
     eastern = pytz.timezone('America/New_York')
     now = datetime.datetime.now(eastern)
-    date_str = now.strftime("%A %B %-d, %Y")
+    date_str = f"{now.strftime('%A %B')} {now.day}, {now.year}"
     parts = date_str.split(' ')
     time_str = now.strftime("%H:%M")
     try:
@@ -446,7 +448,7 @@ def api_intraday():
     min_date_iso = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     if df_day.empty:
         return render_template('partials/intraday.html',
-            error=f"No data for {selected_date.strftime('%b %-d, %Y')}. "
+            error=f"No data for {_fmt_date(selected_date)}. "
                   "Try a US trading day within the last ~9 months.",
             fig_html='', stats=None,
             date_str=date_str, today=today_iso, min_date=min_date_iso)
@@ -485,7 +487,7 @@ def api_intraday():
     line_color = "#FF3D54" if is_down else GREEN_400
     halo_color = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
     fig = create_spx_chart(
-        selected_date.strftime("%b %-d, %Y"),
+        _fmt_date(selected_date),
         df_day['Close'], df_day.index, line_color, halo_color,
         chart_height=420, hover_xfmt="%H:%M",
     )
@@ -593,7 +595,7 @@ def _cmp_resolve_entry(entry, cmp_daily, td_idx, gap_map):
         d_str = entry.get("date")
         if d_str:
             d = datetime.date.fromisoformat(d_str)
-            return [d], d.strftime("%b %-d, %Y")
+            return [d], _fmt_date(d)
         return [], "Specific date"
     rng      = entry.get("range", "All")
     rng_days = _CMP_RANGE_DAYS.get(rng)
@@ -738,7 +740,7 @@ def _build_cmp_charts_html(store) -> str:
                 legendgroup=cmp_lbl, showlegend=False,
                 line=dict(color=line_color, width=0.9), opacity=0.5,
                 hoverlabel=trace_hoverlabel if trace_hoverlabel else None,
-                hovertemplate=f'{cd.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
+                hovertemplate=f'{_fmt_date(cd)}: %{{y:+.2f}}%<extra></extra>',
             ))
     cmp_fig.add_hline(y=0, line_dash="dot", line_color="#B2B2B2", line_width=1)
     cmp_fig.update_layout(
@@ -978,7 +980,7 @@ def _build_cc_results_html(store) -> tuple:
                 line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.8),
                 opacity=0.4, showlegend=False,
                 hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
-                hovertemplate=f'{od.strftime("%b %-d, %Y")}: %{{y:+.2f}}%<extra></extra>',
+                hovertemplate=f'{_fmt_date(od)}: %{{y:+.2f}}%<extra></extra>',
             ))
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
         y_title = "% from prior close" if use_prev_close else "% from open"
