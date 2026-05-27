@@ -1,13 +1,8 @@
 <!-- Conditional comparison — manual mode section -->
 <div>
 
-  <!-- N badge -->
-  {% if n_badge_html %}
-  <div style="margin-bottom:16px">{{ n_badge_html | safe }}</div>
-  {% endif %}
-
-  <!-- Add / Clear -->
-  <div style="display:flex;gap:8px;align-items:center">
+  <!-- Add / Clear + N badge -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
     <button class="btn-outline"
             hx-post="/api/study/cc/manual"
             hx-vals='{"action":"add"}'
@@ -18,8 +13,10 @@
             hx-vals='{"action":"clear"}'
             hx-target="#cc-manual-section"
             hx-swap="innerHTML">Clear all</button>
+    {% if n_badge_html %}
+    <div style="margin-left:auto">{{ n_badge_html | safe }}</div>
+    {% endif %}
   </div>
-
   {% for entry in store.entries %}
   {% set ct = entry.type %}
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />

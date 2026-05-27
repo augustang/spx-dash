@@ -1,6 +1,12 @@
 <!-- Day match — auto mode section -->
 <div>
 
+  {% if n_badge_html %}
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+    {{ n_badge_html | safe }}
+  </div>
+  {% endif %}
+
   <!-- Controls: tolerance + match threshold -->
   <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
     <div>
