@@ -40,7 +40,7 @@
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">Tolerance ±%</p>
       <div class="num-field-row" style="width:120px">
-        <input id="cc-auto-tol" type="number" step="0.1" value="{{ '%.2f' % store.tolerance }}"
+        <input id="cc-auto-tol" type="number" step="0.05" value="{{ '%.2f' % store.tolerance }}"
                class="num-field-input"
                hx-post="/api/study/cc"
                hx-vals='{"action":"set_tolerance"}'
@@ -50,10 +50,10 @@
                hx-swap="innerHTML"
                name="value" />
         <div class="icon-btn-group">
-          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="-0.1" data-min="0.1">
+          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="-0.05" data-min="0.05">
             <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
           </button>
-          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="+0.1" data-min="0.1">
+          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="+0.05" data-min="0.05">
             <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
           </button>
         </div>
@@ -61,22 +61,18 @@
     </div>
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">Min match</p>
-      <div class="pill-group">
+      <select class="figma-dropdown"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"set_threshold"}'
+              hx-trigger="change"
+              hx-target="#cc-section"
+              hx-swap="innerHTML"
+              name="match_threshold">
         {% set mt = store.match_threshold | float %}
-        {% for val, label in [("1.0", "100%"), ("0.75", "75%"), ("0.5", "50%"), ("0.25", "25%")] %}
-        {% set va = val | float %}
-        <label class="pill-label {% if (mt - va) | abs < 0.01 %}active{% endif %}">
-          <input type="radio" name="cc_threshold" value="{{ val }}"
-                 hx-post="/api/study/cc"
-                 hx-vals='{"action":"set_threshold","match_threshold":"{{ val }}"}'
-                 hx-trigger="change"
-                 hx-target="#cc-section"
-                 hx-swap="innerHTML"
-                 style="display:none" />
-          {{ label }}
-        </label>
+        {% for val, label in [("0.9", "90%"), ("0.75", "75%"), ("0.6", "60%"), ("0.5", "50%")] %}
+        <option value="{{ val }}" {% if (mt - val|float)|abs < 0.01 %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
-      </div>
+      </select>
     </div>
   </div>
 

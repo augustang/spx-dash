@@ -128,8 +128,8 @@ def _get_cc_store() -> dict:
         session.modified = True
     # Ensure auto-mode keys exist for sessions created before this feature.
     store.setdefault("auto_mode",       True)
-    store.setdefault("tolerance",       0.5)
-    store.setdefault("match_threshold", 0.5)
+    store.setdefault("tolerance",       0.10)
+    store.setdefault("match_threshold", 0.75)
     return store
 
 
@@ -895,7 +895,7 @@ def api_cc_update():
             pass
     elif action == 'set_tolerance':
         try:
-            store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.5)), 2))
+            store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.10)), 2))
         except (ValueError, TypeError):
             pass
     _save_cc_store(store)
