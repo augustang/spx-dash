@@ -1184,20 +1184,25 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             margin_kw = dict(l=0, r=36, t=16, b=30)
 
         # ── Right panel: horizontal EOD histogram ─────────────────────────
+        # Use negative x so bars grow leftward from the % axis without relying
+        # on autorange="reversed", which breaks Plotly's bar hover hit-testing.
+        max_count = 0
         if not eod.empty and pct_min is not None:
             bsz      = max(0.1, round((pct_max - pct_min) / 20, 2))
             bins_arr = np.arange(pct_min - bsz, pct_max + bsz * 2, bsz)
             counts, edges = np.histogram(eod.values, bins=bins_arr)
             bin_centers   = (edges[:-1] + edges[1:]) / 2
             bar_colors    = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
+            max_count     = int(counts.max()) if counts.size else 0
             megafig.add_trace(go.Bar(
-                x=counts, y=bin_centers,
+                x=[-c for c in counts], y=bin_centers,
                 orientation="h",
                 marker_color=bar_colors,
                 marker_line_width=0,
                 width=bsz * 0.85,
                 showlegend=False,
-                hovertemplate="%{y:+.2f}%: %{x} days<extra></extra>",
+                customdata=counts,
+                hovertemplate="%{y:+.2f}%: %{customdata} days<extra></extra>",
             ), row=1, col=2)
 
         megafig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
@@ -1220,9 +1225,10 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 rangeslider=dict(visible=False),
             ),
             xaxis2=dict(
-                showgrid=False, autorange="reversed",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=4, tickcolor="rgba(0,0,0,0)",
+                showgrid=False,
+                range=[-(max_count * 1.3 or 5), 0],
+                showticklabels=False,
+                ticks="",
             ),
             yaxis=left_y_kw,
             yaxis2=right_y_kw,
