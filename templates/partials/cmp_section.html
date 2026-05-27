@@ -96,16 +96,16 @@
   <!-- Global filters (shown only when there are entries) -->
   {% if store.ids %}
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
-  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:16px">
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
-        {% for opt in range_opts %}
-        <label class="pill-label {% if opt == store.range %}active{% endif %}">
-          <input type="radio" name="cmp_range" value="{{ opt }}"
-                 {% if opt == store.range %}checked{% endif %}
+        {% for opt in gap_opts %}
+        <label class="pill-label {% if opt == store.gap %}active{% endif %}">
+          <input type="radio" name="cmp_gap" value="{{ opt }}"
+                 {% if opt == store.gap %}checked{% endif %}
                  hx-post="/api/study/cmp"
-                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
                  hx-trigger="change"
                  hx-target="#cmp-section"
                  hx-swap="innerHTML"
@@ -116,14 +116,14 @@
       </div>
     </div>
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
       <div class="pill-group">
-        {% for opt in gap_opts %}
-        <label class="pill-label {% if opt == store.gap %}active{% endif %}">
-          <input type="radio" name="cmp_gap" value="{{ opt }}"
-                 {% if opt == store.gap %}checked{% endif %}
+        {% for opt in range_opts %}
+        <label class="pill-label {% if opt == store.range %}active{% endif %}">
+          <input type="radio" name="cmp_range" value="{{ opt }}"
+                 {% if opt == store.range %}checked{% endif %}
                  hx-post="/api/study/cmp"
-                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
+                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
                  hx-trigger="change"
                  hx-target="#cmp-section"
                  hx-swap="innerHTML"
