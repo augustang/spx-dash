@@ -2,7 +2,7 @@
 <div>
 
   <!-- Controls: tolerance + match threshold -->
-  <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px">
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">Tolerance ±%</p>
       <div class="num-field-row" style="width:120px">
@@ -41,12 +41,12 @@
       </select>
     </div>
     {% if n_badge_html %}
-    <div style="margin-left:auto;align-self:flex-end">{{ n_badge_html | safe }}</div>
+    <div style="margin-left:auto;align-self:flex-start">{{ n_badge_html | safe }}</div>
     {% endif %}
   </div>
 
   <!-- Filters (gap + range + view) -->
-  <hr style="border:none;border-top:1px solid #EBEBEB;margin:12px 0" />
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:24px 0 12px" />
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:4px">
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
