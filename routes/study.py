@@ -1061,22 +1061,16 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         pills_html = _stat_pills_html(eod.mean(), eod.median(),
                                       (eod >= 0).mean() * 100, eod.std(), margin_top=24)
 
-    # ── Megachart: overlay (col=1) + EOD histogram (col=2) ───────────────
-    from plotly.subplots import make_subplots
+    # ── Megachart: two separate figures in a flex row ────────────────────
+    # Two independent go.Figure objects share the same y-axis range so the
+    # 0% gridline aligns perfectly, while each has its own isolated hover area.
     megachart_html = ""
     frd5 = _load_frd_5min()
     if not frd5.empty:
-        # shared_yaxes=False gives each panel its own independent hover area;
-        # we sync ranges manually so the 0% gridline still aligns.
-        megafig = make_subplots(
-            rows=1, cols=2,
-            column_widths=[0.80, 0.20],
-            shared_yaxes=False,
-            horizontal_spacing=0.02,
-        )
+        ofig = go.Figure()
         all_oy: list[list[float]] = []
 
-        # ── Left panel: historical overlay traces ─────────────────────────
+        # ── Overlay: historical intraday paths ────────────────────────────
         for od in matched_scores.index:
             score     = int(matched_scores.loc[od])
             match_pct = round(score / n_checkpoints * 100)
@@ -1096,7 +1090,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 [round(today_prev_close * (1 + p / 100), 2) for p in oy]
                 if today_prev_close else None
             )
-            megafig.add_trace(go.Scatter(
+            ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
                 line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.9),
                 opacity=opacity, showlegend=False,
@@ -1108,7 +1102,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                     + (' · %{customdata:,.2f}' if today_prev_close else '')
                     + '<extra></extra>'
                 ),
-            ), row=1, col=1)
+            ))
 
         # ── Today's path ──────────────────────────────────────────────────
         ty: list[float] = []
@@ -1118,16 +1112,18 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 ty = ((today_df["Close"] / today_prev_close - 1) * 100).round(2).tolist()
                 today_prices = today_df["Close"].round(2).tolist()
                 all_oy.append(ty)
-                megafig.add_trace(go.Scatter(
+                ofig.add_trace(go.Scatter(
                     x=tx, y=ty, mode="lines",
                     name="Today", showlegend=False,
                     line=dict(color="#4B7BFF", width=1.5),
                     opacity=1.0,
                     customdata=today_prices,
                     hovertemplate='Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>',
-                ), row=1, col=1)
+                ))
 
-        # ── Compute % range ───────────────────────────────────────────────
+        ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
+
+        # ── Compute shared % range ────────────────────────────────────────
         flat_y = [v for series in all_oy for v in series]
         if flat_y and today_prev_close:
             buf       = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
@@ -1135,90 +1131,42 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             pct_max   = max(flat_y) + buf
             price_min = today_prev_close * (1 + pct_min / 100)
             price_max = today_prev_close * (1 + pct_max / 100)
-            # Dummy invisible trace forces the price axis (yaxis3) to render.
-            megafig.add_trace(go.Scatter(
+            # Dummy invisible trace forces the price axis (yaxis2) to render.
+            ofig.add_trace(go.Scatter(
                 x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
                 y=[price_min],
-                yaxis="y3", mode="markers",
+                yaxis="y2", mode="markers",
                 marker=dict(opacity=0, size=1),
                 showlegend=False, hoverinfo="skip",
             ))
-            # Left panel: % axis, no tick labels (labels live on right panel)
-            left_y_kw = dict(
+            overlay_yaxis_kw: dict = dict(
                 range=[pct_min, pct_max],
                 showgrid=True, gridcolor="#F0F0F0",
-                showticklabels=False,
-                ticks="", ticklen=0,
+                showticklabels=False, ticks="", ticklen=0,
             )
-            # Right panel: % axis with tick labels on the far right
-            right_y_kw = dict(
-                range=[pct_min, pct_max],
-                side="right",
-                showgrid=False,
-                ticksuffix="%",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-            )
-            # Price overlay on the far left of the left panel
-            price_axis_kw = dict(
+            overlay_yaxis2_kw: dict = dict(
                 side="left", overlaying="y",
                 range=[price_min, price_max],
                 showgrid=False, tickformat=",.0f",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             )
-            margin_kw = dict(l=0, r=36, t=16, b=30)
+            overlay_margin = dict(l=0, r=0, t=16, b=30)
         else:
             pct_min = pct_max = None
-            left_y_kw = dict(
+            overlay_yaxis_kw  = dict(
                 showgrid=True, gridcolor="#F0F0F0",
                 showticklabels=False, ticks="", ticklen=0,
             )
-            right_y_kw = dict(
-                side="right", showgrid=False,
-                ticksuffix="%",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-            )
-            price_axis_kw = {}
-            margin_kw = dict(l=0, r=36, t=16, b=30)
+            overlay_yaxis2_kw = {}
+            overlay_margin    = dict(l=0, r=0, t=16, b=30)
 
-        # ── Right panel: horizontal EOD histogram ─────────────────────────
-        # Use negative x so bars grow leftward from the % axis without relying
-        # on autorange="reversed", which breaks Plotly's bar hover hit-testing.
-        max_count = 0
-        if not eod.empty and pct_min is not None:
-            bsz      = max(0.1, round((pct_max - pct_min) / 20, 2))
-            bins_arr = np.arange(pct_min - bsz, pct_max + bsz * 2, bsz)
-            counts, edges = np.histogram(eod.values, bins=bins_arr)
-            bin_centers   = (edges[:-1] + edges[1:]) / 2
-            # Drop empty bins so they can't be accidentally hovered
-            mask        = counts > 0
-            counts      = counts[mask]
-            bin_centers = bin_centers[mask]
-            bar_colors  = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
-            max_count   = int(counts.max()) if counts.size else 0
-            hover_text  = [f"{round(float(bc), 2):+.2f}%: {int(c)} days"
-                           for bc, c in zip(bin_centers, counts)]
-            megafig.add_trace(go.Bar(
-                x=[-c for c in counts], y=bin_centers,
-                orientation="h",
-                marker_color=bar_colors,
-                marker_line_width=0,
-                width=bsz * 0.85,
-                showlegend=False,
-                hovertext=hover_text,
-                hovertemplate="%{hovertext}<extra></extra>",
-            ), row=1, col=2)
-
-        megafig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-
-        layout_kw: dict = dict(
+        overlay_layout: dict = dict(
             font=dict(family="Inter, sans-serif"),
-            height=400, margin=margin_kw,
+            height=400, margin=overlay_margin,
             plot_bgcolor="white", paper_bgcolor="white",
             hovermode="closest", hoverdistance=-1,
-            showlegend=False, bargap=0.06,
+            showlegend=False,
             hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
                             font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
             xaxis=dict(
@@ -1230,18 +1178,59 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                        datetime.datetime.combine(_ref, datetime.time(16, 0))],
                 rangeslider=dict(visible=False),
             ),
-            xaxis2=dict(
-                showgrid=False,
-                range=[-(max_count * 1.3 or 5), 0],
-                showticklabels=False,
-                ticks="",
-            ),
-            yaxis=left_y_kw,
-            yaxis2=right_y_kw,
+            yaxis=overlay_yaxis_kw,
         )
-        if price_axis_kw:
-            layout_kw["yaxis3"] = price_axis_kw
-        megafig.update_layout(**layout_kw)
+        if overlay_yaxis2_kw:
+            overlay_layout["yaxis2"] = overlay_yaxis2_kw
+        ofig.update_layout(**overlay_layout)
+
+        # ── Histogram figure ──────────────────────────────────────────────
+        histfig = go.Figure()
+        if not eod.empty and pct_min is not None:
+            bsz      = max(0.1, round((pct_max - pct_min) / 20, 2))
+            bins_arr = np.arange(pct_min - bsz, pct_max + bsz * 2, bsz)
+            counts, edges = np.histogram(eod.values, bins=bins_arr)
+            bin_centers   = (edges[:-1] + edges[1:]) / 2
+            mask        = counts > 0
+            counts      = counts[mask]
+            bin_centers = bin_centers[mask]
+            bar_colors  = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
+            max_count   = int(counts.max()) if counts.size else 1
+            hover_text  = [f"{round(float(bc), 2):+.2f}%: {int(c)} days"
+                           for bc, c in zip(bin_centers, counts)]
+            histfig.add_trace(go.Bar(
+                x=list(counts), y=bin_centers,
+                orientation="h",
+                marker_color=bar_colors,
+                marker_line_width=0,
+                width=bsz * 0.85,
+                showlegend=False,
+                hovertext=hover_text,
+                hovertemplate="%{hovertext}<extra></extra>",
+            ))
+            histfig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
+            histfig.update_layout(
+                font=dict(family="Inter, sans-serif"),
+                height=400, margin=dict(l=0, r=36, t=16, b=30),
+                plot_bgcolor="white", paper_bgcolor="white",
+                hovermode="closest",
+                showlegend=False,
+                hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
+                                font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
+                xaxis=dict(
+                    range=[0, max_count * 1.3],
+                    autorange="reversed",
+                    showgrid=False, showticklabels=False, ticks="",
+                ),
+                yaxis=dict(
+                    range=[pct_min, pct_max],
+                    side="right",
+                    showgrid=True, gridcolor="#F0F0F0",
+                    ticksuffix="%",
+                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                ),
+            )
 
         today_legend = (
             '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:8px">'
@@ -1249,11 +1238,17 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             '<span style="font-size:11px;color:#555;">Today</span>'
             '</div>'
         ) if (not today_df.empty and today_prev_close) else ''
+
+        overlay_chart = _chart_html('cc-overlay-chart', ofig)
+        hist_chart    = _chart_html('cc-hist-chart', histfig) if not histfig.data == () else ''
         megachart_html = (
             f'<p style="font-size:11px;color:#888;margin-top:24px;margin-bottom:0">'
             f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
             + today_legend
-            + _chart_html('cc-megachart', megafig)
+            + f'<div style="display:flex;gap:0;width:100%">'
+            + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
+            + f'<div style="flex:1;min-width:0">{hist_chart}</div>'
+            + '</div>'
         )
 
     return n_badge_html, pills_html + megachart_html
