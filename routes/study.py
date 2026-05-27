@@ -903,6 +903,8 @@ def api_cc_update():
     elif action == 'set_view':
         if "show_historical" in request.form:
             store["show_historical"] = request.form.get("show_historical") == "true"
+            if not store["show_historical"]:
+                store["line_color_filter"] = "all"
         if "line_color_filter" in request.form:
             store["line_color_filter"] = request.form.get("line_color_filter", "all")
             if store["line_color_filter"] != "all":
