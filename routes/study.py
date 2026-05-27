@@ -1192,8 +1192,14 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             bins_arr = np.arange(pct_min - bsz, pct_max + bsz * 2, bsz)
             counts, edges = np.histogram(eod.values, bins=bins_arr)
             bin_centers   = (edges[:-1] + edges[1:]) / 2
-            bar_colors    = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
-            max_count     = int(counts.max()) if counts.size else 0
+            # Drop empty bins so they can't be accidentally hovered
+            mask        = counts > 0
+            counts      = counts[mask]
+            bin_centers = bin_centers[mask]
+            bar_colors  = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
+            max_count   = int(counts.max()) if counts.size else 0
+            hover_text  = [f"{round(float(bc), 2):+.2f}%: {int(c)} days"
+                           for bc, c in zip(bin_centers, counts)]
             megafig.add_trace(go.Bar(
                 x=[-c for c in counts], y=bin_centers,
                 orientation="h",
@@ -1201,8 +1207,8 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 marker_line_width=0,
                 width=bsz * 0.85,
                 showlegend=False,
-                customdata=counts,
-                hovertemplate="%{y:+.2f}%: %{customdata} days<extra></extra>",
+                text=hover_text,
+                hovertemplate="%{text}<extra></extra>",
             ), row=1, col=2)
 
         megafig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
