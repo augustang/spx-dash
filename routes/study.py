@@ -865,21 +865,41 @@ def api_cc_update():
 
 @study_bp.route('/api/study/cc')
 def api_cc_get():
-    store = _get_cc_store()
-    n_badge_html, results_html = _build_cc_results_html(store)
-    return render_template('partials/cc_section.html',
-        store=store,
-        cond_types=_CC_COND_TYPES,
-        event_opts=_CC_EVENT_OPTS,
-        time_opts=_CC_TIME_OPTS,
-        dow_labels=_CC_DOW_LABELS,
-        mon_labels=_CC_MON_LABELS,
-        range_opts=_CMP_RANGE_OPTS,
-        gap_opts=_CMP_GAP_OPTS,
-        norm_opts=_CC_NORM_OPTS,
-        n_badge_html=n_badge_html,
-        results_html=results_html,
-    )
+    # region agent log
+    import time as _time, traceback as _tb
+    _dbg_log = '/Users/autang/Documents/Misc/spx-dash/.cursor/debug-187b2e.log'
+    def _dbg(msg, data, hyp='A'):
+        import json as _json
+        entry = _json.dumps({'sessionId':'187b2e','timestamp':int(_time.time()*1000),'location':'study.py:api_cc_get','message':msg,'data':data,'hypothesisId':hyp})
+        print(f'[DBG-187b2e] {msg} {data}', flush=True)
+        try:
+            with open(_dbg_log, 'a') as _f: _f.write(entry + '\n')
+        except Exception: pass
+    _t0 = _time.time()
+    try:
+        store = _get_cc_store()
+        _dbg('CC_GET_START', {'ids': store.get('ids'), 'n_entries': len(store.get('entries', []))}, 'A')
+        n_badge_html, results_html = _build_cc_results_html(store)
+        _dbg('CC_GET_BUILT', {'results_bytes': len(results_html), 'elapsed_ms': round((_time.time()-_t0)*1000)}, 'A')
+        rendered = render_template('partials/cc_section.html',
+            store=store,
+            cond_types=_CC_COND_TYPES,
+            event_opts=_CC_EVENT_OPTS,
+            time_opts=_CC_TIME_OPTS,
+            dow_labels=_CC_DOW_LABELS,
+            mon_labels=_CC_MON_LABELS,
+            range_opts=_CMP_RANGE_OPTS,
+            gap_opts=_CMP_GAP_OPTS,
+            norm_opts=_CC_NORM_OPTS,
+            n_badge_html=n_badge_html,
+            results_html=results_html,
+        )
+        _dbg('CC_GET_OK', {'resp_bytes': len(rendered), 'total_ms': round((_time.time()-_t0)*1000)}, 'B')
+        return rendered
+    except Exception as _e:
+        _dbg('CC_GET_ERROR', {'error': str(_e), 'type': type(_e).__name__, 'trace': _tb.format_exc()[-600:]}, 'A')
+        raise
+    # endregion
 
 
 def _apply_cc_conditions(snap, store):

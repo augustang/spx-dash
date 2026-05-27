@@ -171,17 +171,45 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 // from rapid stepper clicks or filter changes.
 (function() {
   var _ccXhr = null;
+  // #region agent log
+  var _ccReqCount = 0;
+  var _dbgEp = 'http://127.0.0.1:7534/ingest/e170fd30-cdf9-42dd-848b-28664fbc7318';
+  function _dbgLog(msg, data, hyp) {
+    var payload = {sessionId:'187b2e',timestamp:Date.now(),location:'study.html:cc-abort',message:msg,data:data,hypothesisId:hyp||'C'};
+    console.log('[DBG-187b2e]', msg, data);
+    fetch(_dbgEp,{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'187b2e'},body:JSON.stringify(payload)}).catch(function(){});
+  }
+  // #endregion
   document.body.addEventListener('htmx:beforeRequest', function(e) {
     if (e.detail.target && e.detail.target.id === 'cc-section') {
+      _ccReqCount++;
+      // #region agent log
+      _dbgLog('CC_BEFORE_REQUEST', {count:_ccReqCount, hasXhr:!!_ccXhr, xhrState:_ccXhr ? _ccXhr.readyState : null, hasDetailXhr:!!e.detail.xhr}, 'C');
+      // #endregion
       if (_ccXhr) { try { _ccXhr.abort(); } catch(_) {} }
       _ccXhr = e.detail.xhr || null;
     }
   });
   document.body.addEventListener('htmx:afterRequest', function(e) {
     if (e.detail.target && e.detail.target.id === 'cc-section') {
+      // #region agent log
+      _dbgLog('CC_AFTER_REQUEST', {successful:e.detail.successful, status:e.detail.xhr&&e.detail.xhr.status}, 'C');
+      // #endregion
       _ccXhr = null;
     }
   });
+  // #region agent log
+  document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'cc-section') {
+      _dbgLog('CC_AFTER_SWAP', {targetId:e.detail.target.id}, 'D');
+    }
+  });
+  document.body.addEventListener('htmx:responseError', function(e) {
+    if (e.detail.target && e.detail.target.id === 'cc-section') {
+      _dbgLog('CC_RESPONSE_ERROR', {status:e.detail.xhr&&e.detail.xhr.status, response:e.detail.xhr&&e.detail.xhr.responseText&&e.detail.xhr.responseText.slice(0,200)}, 'A');
+    }
+  });
+  // #endregion
 })();
 </script>
 {% endblock %}
