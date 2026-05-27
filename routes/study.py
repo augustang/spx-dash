@@ -1185,7 +1185,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
                 type='date',
                 range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
-                       datetime.datetime.combine(_ref, datetime.time(16, 4))],
+                       datetime.datetime.combine(_ref, datetime.time(16, 15))],
                 rangeslider=dict(visible=False),
             ),
             yaxis=overlay_yaxis_kw,
