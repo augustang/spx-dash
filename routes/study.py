@@ -130,7 +130,7 @@ def _get_cc_store() -> dict:
     store.setdefault("auto_mode",        True)
     store.setdefault("tolerance",        0.20)
     store.setdefault("match_threshold",  0.75)
-    store.setdefault("show_historical",  True)
+    store.setdefault("show_historical",  False)
     return store
 
 
