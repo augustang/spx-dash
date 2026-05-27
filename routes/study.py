@@ -1267,7 +1267,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             + '</div>'
             + today_legend
             + f'<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
-            f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
+            f'{n} days matching ≥ {int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
         )
 
     return n_badge_html, pills_html + megachart_html
