@@ -121,9 +121,11 @@
                    style="display:none" />
             Lines
           </label>
-          <label class="pill-label {% if lcf == 'green' %}active{% endif %}">
+          <label class="pill-label {% if lcf == 'green' %}active{% endif %}"
+                 style="{% if not sh %}opacity:0.35;pointer-events:none;cursor:default{% endif %}">
             <input type="checkbox"
                    {% if lcf == 'green' %}checked{% endif %}
+                   {% if not sh %}disabled{% endif %}
                    hx-post="/api/study/cc"
                    hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "green" else "green" }}"}'
                    hx-trigger="change"
@@ -132,9 +134,11 @@
                    style="display:none" />
             Green only
           </label>
-          <label class="pill-label {% if lcf == 'red' %}active{% endif %}">
+          <label class="pill-label {% if lcf == 'red' %}active{% endif %}"
+                 style="{% if not sh %}opacity:0.35;pointer-events:none;cursor:default{% endif %}">
             <input type="checkbox"
                    {% if lcf == 'red' %}checked{% endif %}
+                   {% if not sh %}disabled{% endif %}
                    hx-post="/api/study/cc"
                    hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "red" else "red" }}"}'
                    hx-trigger="change"
