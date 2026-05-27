@@ -273,16 +273,16 @@
   <!-- Filters + Results -->
   {% if store.ids %}
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
-  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:16px">
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
-        {% for opt in range_opts %}
-        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
-          <input type="radio" name="cc_range" value="{{ opt }}"
-                 {% if opt == (store.range or 'All') %}checked{% endif %}
+        {% for opt in gap_opts %}
+        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
+          <input type="radio" name="cc_gap" value="{{ opt }}"
+                 {% if opt == (store.gap or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc"
-                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
                  hx-trigger="change"
                  hx-target="#cc-section"
                  hx-swap="innerHTML"
@@ -293,14 +293,14 @@
       </div>
     </div>
     <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
       <div class="pill-group">
-        {% for opt in gap_opts %}
-        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
-          <input type="radio" name="cc_gap" value="{{ opt }}"
-                 {% if opt == (store.gap or 'All') %}checked{% endif %}
+        {% for opt in range_opts %}
+        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
+          <input type="radio" name="cc_range" value="{{ opt }}"
+                 {% if opt == (store.range or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc"
-                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
+                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
                  hx-trigger="change"
                  hx-target="#cc-section"
                  hx-swap="innerHTML"
