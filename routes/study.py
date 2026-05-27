@@ -127,9 +127,11 @@ def _get_cc_store() -> dict:
         store["ids"]     = [i for i in store.get("ids", []) if i not in bad_ids]
         session.modified = True
     # Ensure auto-mode keys exist for sessions created before this feature.
-    store.setdefault("auto_mode",       True)
-    store.setdefault("tolerance",       0.20)
-    store.setdefault("match_threshold", 0.75)
+    store.setdefault("auto_mode",        True)
+    store.setdefault("tolerance",        0.20)
+    store.setdefault("match_threshold",  0.75)
+    store.setdefault("show_historical",    False)
+    store.setdefault("line_color_filter",  "all")
     return store
 
 
@@ -898,6 +900,15 @@ def api_cc_update():
             store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.10)), 2))
         except (ValueError, TypeError):
             pass
+    elif action == 'set_view':
+        if "show_historical" in request.form:
+            store["show_historical"] = request.form.get("show_historical") == "true"
+            if not store["show_historical"]:
+                store["line_color_filter"] = "all"
+        if "line_color_filter" in request.form:
+            store["line_color_filter"] = request.form.get("line_color_filter", "all")
+            if store["line_color_filter"] != "all":
+                store["show_historical"] = True
     _save_cc_store(store)
     today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
@@ -1054,27 +1065,32 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             pass
 
 
-    # ── Stat pills + histogram ────────────────────────────────────────────
+    # ── Stat pills ────────────────────────────────────────────────────────
     eod = matched["eod_chg_pct"].dropna() if "eod_chg_pct" in matched.columns else pd.Series(dtype=float)
-    pills_html = hist_html = ""
+    pills_html = ""
     if not eod.empty:
         pills_html = _stat_pills_html(eod.mean(), eod.median(),
                                       (eod >= 0).mean() * 100, eod.std(), margin_top=24)
-        hist_html  = _chart_html('cc-hist-chart',
-                                 _build_histogram_figure(eod, x_label="EOD % from prior close"))
 
-    # ── Overlay: matched historical days + today highlighted ──────────────
-    overlay_html = ""
+    # ── Megachart: two separate figures in a flex row ────────────────────
+    # Two independent go.Figure objects share the same y-axis range so the
+    # 0% gridline aligns perfectly, while each has its own isolated hover area.
+    megachart_html = ""
     frd5 = _load_frd_5min()
     if not frd5.empty:
         ofig = go.Figure()
-        all_oy: list[list[float]] = []  # collect all % arrays to compute axis range
+        all_oy: list[list[float]] = []
+
+        # ── Overlay: historical intraday paths ────────────────────────────
+        show_historical   = store.get("show_historical", False)
+        line_color_filter = store.get("line_color_filter", "all")
         for od in matched_scores.index:
             score     = int(matched_scores.loc[od])
             match_pct = round(score / n_checkpoints * 100)
-            opacity   = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
+            base_opacity = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
             ots = pd.Timestamp(od)
             odf = frd5.loc[ots : ots + pd.Timedelta(hours=23, minutes=59)]
+            odf = odf[odf.index.time <= datetime.time(16, 4)]
             if odf.empty:
                 continue
             ox   = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
@@ -1083,28 +1099,38 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 continue
             oy  = ((odf["Close"] / base - 1) * 100).round(2).tolist()
             all_oy.append(oy)
-            ev  = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
-            # today-equivalent SPX price for each point: prev_close × (1 + pct/100)
+            ev       = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
+            is_green = ev >= 0
+            color_visible = (
+                line_color_filter == "all" or
+                (line_color_filter == "green" and is_green) or
+                (line_color_filter == "red"   and not is_green)
+            )
+            trace_opacity = (base_opacity if color_visible else 0) if show_historical else 0
             today_equiv = (
                 [round(today_prev_close * (1 + p / 100), 2) for p in oy]
                 if today_prev_close else None
             )
             ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
-                line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.9),
-                opacity=opacity, showlegend=False,
+                line=dict(color=GREEN_400 if is_green else "#FF3D54", width=0.9),
+                opacity=trace_opacity,
+                showlegend=False,
                 customdata=today_equiv,
-                hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
+                hoverlabel=dict(font=dict(color="#1E1E1E" if is_green else "white")),
+                hoverinfo="skip" if trace_opacity == 0 else None,
                 hovertemplate=(
                     f'{_fmt_date(od)} ({match_pct}% match):'
                     f' %{{y:+.2f}}%'
                     + (' · %{customdata:,.2f}' if today_prev_close else '')
                     + '<extra></extra>'
-                ),
+                ) if trace_opacity > 0 else None,
             ))
-        # Add today's path last so it sits on top
+
+        # ── Today's path ──────────────────────────────────────────────────
         ty: list[float] = []
         if not today_df.empty and today_prev_close:
+            today_df = today_df[today_df.index.time <= datetime.time(16, 4)]
             if today_prev_close != 0:
                 tx = [datetime.datetime.combine(_ref, ts.time()) for ts in today_df.index]
                 ty = ((today_df["Close"] / today_prev_close - 1) * 100).round(2).tolist()
@@ -1118,9 +1144,19 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                     customdata=today_prices,
                     hovertemplate='Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>',
                 ))
+                # Trailing dot at the last point of today's line
+                ofig.add_trace(go.Scatter(
+                    x=[tx[-1]], y=[ty[-1]], mode="markers",
+                    marker=dict(
+                        color="#4B7BFF", size=4,
+                        line=dict(color="rgba(75,123,255,0.3)", width=8),
+                    ),
+                    showlegend=False, hoverinfo="skip",
+                ))
+
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
 
-        # Compute % range across all traces to synchronize the price axis.
+        # ── Compute shared % range ────────────────────────────────────────
         flat_y = [v for series in all_oy for v in series]
         if flat_y and today_prev_close:
             buf       = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
@@ -1128,7 +1164,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             pct_max   = max(flat_y) + buf
             price_min = today_prev_close * (1 + pct_min / 100)
             price_max = today_prev_close * (1 + pct_max / 100)
-            # Dummy invisible trace on y2 — required for Plotly to render the axis.
+            # Dummy invisible trace forces the price axis (yaxis2) to render.
             ofig.add_trace(go.Scatter(
                 x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
                 y=[price_min],
@@ -1136,65 +1172,121 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 marker=dict(opacity=0, size=1),
                 showlegend=False, hoverinfo="skip",
             ))
-            yaxis_kw  = dict(
-                side="right", range=[pct_min, pct_max],
-                automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            overlay_yaxis_kw: dict = dict(
+                range=[pct_min, pct_max],
+                showgrid=True, gridcolor="#F0F0F0",
+                showticklabels=False, ticks="", ticklen=0,
+                automargin=False,
             )
-            yaxis2_kw = dict(
+            overlay_yaxis2_kw: dict = dict(
                 side="left", overlaying="y",
                 range=[price_min, price_max],
                 showgrid=False, tickformat=",.0f",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             )
-            margin_kw = dict(l=0, r=36, t=16, b=30)
+            overlay_margin = dict(l=0, r=0, t=16, b=30)
         else:
-            # Fallback: single-axis layout (no prev_close available).
-            yaxis_kw  = dict(
-                automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            pct_min = pct_max = None
+            overlay_yaxis_kw  = dict(
+                showgrid=True, gridcolor="#F0F0F0",
+                showticklabels=False, ticks="", ticklen=0,
+                automargin=False,
             )
-            yaxis2_kw = {}
-            margin_kw = dict(l=48, r=0, t=16, b=30)
+            overlay_yaxis2_kw = {}
+            overlay_margin    = dict(l=0, r=0, t=16, b=30)
 
-        layout_kw: dict = dict(
+        overlay_layout: dict = dict(
             font=dict(family="Inter, sans-serif"),
-            height=400, margin=margin_kw,
+            height=440, margin=overlay_margin,
             plot_bgcolor="white", paper_bgcolor="white",
             hovermode="closest", hoverdistance=-1,
             showlegend=False,
             hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
                             font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
-            xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
-                       tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                       ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                       type='date',
-                       range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
-                              datetime.datetime.combine(_ref, datetime.time(16, 0))],
-                       rangeslider=dict(visible=False)),
-            yaxis=yaxis_kw,
+            xaxis=dict(
+                showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
+                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                type='date',
+                range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
+                       datetime.datetime.combine(_ref, datetime.time(16, 15))],
+                rangeslider=dict(visible=False),
+            ),
+            yaxis=overlay_yaxis_kw,
         )
-        if yaxis2_kw:
-            layout_kw["yaxis2"] = yaxis2_kw
-        ofig.update_layout(**layout_kw)
+        if overlay_yaxis2_kw:
+            overlay_layout["yaxis2"] = overlay_yaxis2_kw
+        ofig.update_layout(**overlay_layout)
+
+        # ── Histogram figure ──────────────────────────────────────────────
+        histfig = go.Figure()
+        if not eod.empty and pct_min is not None:
+            bsz      = max(0.1, round((pct_max - pct_min) / 20, 2))
+            bins_arr = np.arange(pct_min - bsz, pct_max + bsz * 2, bsz)
+            counts, edges = np.histogram(eod.values, bins=bins_arr)
+            bin_centers   = (edges[:-1] + edges[1:]) / 2
+            mask        = counts > 0
+            counts      = counts[mask]
+            bin_centers = bin_centers[mask]
+            bar_colors  = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
+            max_count   = int(counts.max()) if counts.size else 1
+            hover_text  = [f"{round(float(bc), 2):+.2f}%: {int(c)} days"
+                           for bc, c in zip(bin_centers, counts)]
+            histfig.add_trace(go.Bar(
+                x=list(counts), y=bin_centers,
+                orientation="h",
+                marker_color=bar_colors,
+                marker_line_width=0,
+                width=bsz * 0.85,
+                showlegend=False,
+                hovertext=hover_text,
+                hovertemplate="%{hovertext}<extra></extra>",
+            ))
+            histfig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
+            histfig.update_layout(
+                font=dict(family="Inter, sans-serif"),
+                height=440, margin=dict(l=0, r=36, t=16, b=30),
+                plot_bgcolor="white", paper_bgcolor="white",
+                hovermode="closest",
+                showlegend=False,
+                hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
+                                font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
+                xaxis=dict(
+                    range=[0, max_count * 1.3],
+                    autorange="reversed",
+                    showgrid=False, showticklabels=False, ticks="",
+                ),
+                yaxis=dict(
+                    range=[pct_min, pct_max],
+                    side="right",
+                    showgrid=True, gridcolor="#F0F0F0",
+                    ticksuffix="%",
+                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                ),
+            )
 
         today_legend = (
-            '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:8px">'
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:12px;margin-bottom:0">'
             '<span style="display:inline-block;width:20px;height:1.5px;background:#4B7BFF;border-radius:1px;"></span>'
             '<span style="font-size:11px;color:#555;">Today</span>'
             '</div>'
         ) if (not today_df.empty and today_prev_close) else ''
-        overlay_html = (
-            f'<p style="font-size:11px;color:#888;margin-top:24px;margin-bottom:0">'
-            f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
+
+        overlay_chart = _chart_html('cc-overlay-chart', ofig)
+        hist_chart    = _chart_html('cc-hist-chart', histfig) if len(histfig.data) > 0 else ''
+        megachart_html = (
+            f'<div style="display:flex;gap:0;width:100%;margin-top:24px">'
+            + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
+            + f'<div style="flex:0.5;min-width:0;margin-left:-4px">{hist_chart}</div>'
+            + '</div>'
             + today_legend
-            + _chart_html('cc-overlay-chart', ofig)
+            + f'<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
+            f'{n} days matching ≥ {int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
         )
 
-    return n_badge_html, pills_html + hist_html + overlay_html
+    return n_badge_html, pills_html + megachart_html
 
 
 def _apply_cc_conditions(snap, store):
