@@ -1182,7 +1182,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
 
         overlay_layout: dict = dict(
             font=dict(family="Inter, sans-serif"),
-            height=400, margin=overlay_margin,
+            height=440, margin=overlay_margin,
             plot_bgcolor="white", paper_bgcolor="white",
             hovermode="closest", hoverdistance=-1,
             showlegend=False,
@@ -1230,7 +1230,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             histfig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
             histfig.update_layout(
                 font=dict(family="Inter, sans-serif"),
-                height=400, margin=dict(l=0, r=36, t=16, b=30),
+                height=440, margin=dict(l=0, r=36, t=16, b=30),
                 plot_bgcolor="white", paper_bgcolor="white",
                 hovermode="closest",
                 showlegend=False,
