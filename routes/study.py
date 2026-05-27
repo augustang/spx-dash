@@ -126,6 +126,10 @@ def _get_cc_store() -> dict:
         store["entries"] = [e for e in store["entries"] if e["id"] not in bad_ids]
         store["ids"]     = [i for i in store.get("ids", []) if i not in bad_ids]
         session.modified = True
+    # Ensure auto-mode keys exist for sessions created before this feature.
+    store.setdefault("auto_mode",       True)
+    store.setdefault("tolerance",       0.10)
+    store.setdefault("match_threshold", 0.75)
     return store
 
 
@@ -269,6 +273,39 @@ def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+@cache.memoize(timeout=120)
+def _get_today_5min_live() -> pd.DataFrame:
+    """Fetch today's 5-min bars with a 2-minute cache so auto-mode stays current."""
+    today = datetime.date.today()
+    start_dt = datetime.datetime.combine(today, datetime.time(0, 0))
+    end_dt   = datetime.datetime.combine(today, datetime.time(23, 59, 59))
+    raw = schwab_client.fetch_price_history(
+        symbol="$SPX", period_type="day", freq_type="minute", freq=5,
+        start_date=int(start_dt.timestamp() * 1000),
+        end_date=int(end_dt.timestamp() * 1000),
+    )
+    if raw and 'candles' in raw:
+        df = pd.DataFrame(raw['candles'])
+        if not df.empty:
+            df['datetime'] = (
+                pd.to_datetime(df['datetime'], unit='ms')
+                .dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+                .dt.tz_localize(None)
+            )
+            df = df[df['datetime'].dt.date == today]
+            if not df.empty:
+                df.set_index('datetime', inplace=True)
+                df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+                return df.between_time('09:30', '16:00')
+    # Fallback to the CSV archive for today's rows if Schwab is unavailable.
+    frd = _load_frd_5min()
+    if not frd.empty:
+        day_df = frd[frd.index.date == today]
+        if not day_df.empty:
+            return day_df[["Open", "High", "Low", "Close"]]
+    return pd.DataFrame()
+
+
 @cache.memoize(timeout=0)
 def _build_daily_snapshots() -> pd.DataFrame:
     frd5 = _load_frd_5min()
@@ -305,8 +342,9 @@ def _build_daily_snapshots() -> pd.DataFrame:
         sc = sb.groupby("_date")["Close"].last()
         sh = sb.groupby("_date")["High"].max()
         sl = sb.groupby("_date")["Low"].min()
-        snap[f"pct_at_{k}"]   = ((sc / grp_open - 1) * 100).reindex(snap.index)
-        snap[f"range_at_{k}"] = ((sh - sl) / grp_open * 100).reindex(snap.index)
+        snap[f"pct_at_{k}"]             = ((sc / grp_open - 1) * 100).reindex(snap.index)
+        snap[f"pct_from_close_at_{k}"] = ((sc / snap["prev_close"]) - 1) * 100
+        snap[f"range_at_{k}"]           = ((sh - sl) / grp_open * 100).reindex(snap.index)
     all_ds = sorted(snap.index.tolist())
     if all_ds:
         ev_s = min(all_ds) - datetime.timedelta(days=90)
@@ -846,7 +884,22 @@ def api_cc_update():
         store["range"] = request.form.get('range', store.get("range", "All"))
         store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
         store["norm"]  = request.form.get('norm',  store.get("norm",  "% from prior close"))
+    elif action == 'auto':
+        store["auto_mode"] = True
+    elif action == 'manual':
+        store["auto_mode"] = False
+    elif action == 'set_threshold':
+        try:
+            store["match_threshold"] = float(request.form.get("match_threshold", 0.5))
+        except (ValueError, TypeError):
+            pass
+    elif action == 'set_tolerance':
+        try:
+            store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.10)), 2))
+        except (ValueError, TypeError):
+            pass
     _save_cc_store(store)
+    today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
         store=store,
@@ -860,12 +913,14 @@ def api_cc_update():
         norm_opts=_CC_NORM_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
+        today_checkpoints=today_checkpoints,
     )
 
 
 @study_bp.route('/api/study/cc')
 def api_cc_get():
     store = _get_cc_store()
+    today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
     return render_template('partials/cc_section.html',
         store=store,
@@ -879,7 +934,267 @@ def api_cc_get():
         norm_opts=_CC_NORM_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
+        today_checkpoints=today_checkpoints,
     )
+
+
+def _compute_today_checkpoints() -> list:
+    """Return completed half-hour checkpoints for today as [(time_str, pct_from_prior_close), ...]."""
+    import pytz
+    now_et = datetime.datetime.now(pytz.timezone("America/New_York"))
+    df = _get_today_5min_live()
+    if df.empty:
+        return []
+    # Look up today's prior close from the daily data (same approach as api_intraday).
+    prev_close = None
+    try:
+        today_ts = pd.Timestamp(datetime.date.today())
+        dl = get_spx_daily(1)
+        if not dl.empty:
+            prior_days = dl.index[dl.index < today_ts]
+            if len(prior_days) > 0:
+                prev_close = float(dl.loc[prior_days[-1], "Close"])
+    except Exception:
+        pass
+    if not prev_close:
+        return []
+    result = []
+    for h, m in _CC_SNAP_TIMES:
+        if now_et.time() < datetime.time(h, m):
+            break
+        sub = df[df.index.time <= datetime.time(h, m)]
+        if sub.empty:
+            continue
+        pct = round((float(sub["Close"].iloc[-1]) / prev_close - 1) * 100, 3)
+        result.append((f"{h}:{m:02d}", pct))
+    return result
+
+
+def _score_days_against_checkpoints(snap: pd.DataFrame, checkpoints: list, tolerance: float) -> pd.Series:
+    """For each day in snap, count how many checkpoints fall within ±tolerance of today's value."""
+    if not checkpoints or snap.empty:
+        return pd.Series(0, index=snap.index, dtype=int)
+    scores = pd.Series(0, index=snap.index, dtype=int)
+    for time_str, target_pct in checkpoints:
+        _h, _m = time_str.split(":")
+        col = f"pct_from_close_at_{int(_h):02d}{int(_m):02d}"
+        if col not in snap.columns:
+            continue
+        within = snap[col].between(target_pct - tolerance, target_pct + tolerance).fillna(False)
+        scores = scores + within.astype(int)
+    return scores
+
+
+def _build_cc_auto_results_html(store, snap) -> tuple:
+    checkpoints   = _compute_today_checkpoints()
+    tolerance     = float(store.get("tolerance", 0.5))
+    threshold     = float(store.get("match_threshold", 0.5))
+
+    if not checkpoints:
+        return "", (
+            '<p style="font-size:13px;color:#aaa;padding:8px 0">'
+            'No checkpoints yet — check back once the market opens.</p>'
+        )
+
+    n_checkpoints = len(checkpoints)
+    scores = _score_days_against_checkpoints(snap, checkpoints, tolerance)
+
+    rng_days = _CMP_RANGE_DAYS.get(store.get("range", "All"))
+    if rng_days:
+        cutoff = datetime.date.today() - datetime.timedelta(days=rng_days)
+        scores = scores[scores.index >= cutoff]
+
+    gap_filter = store.get("gap", "All")
+    if gap_filter != "All" and "gap_pct" in snap.columns:
+        gap_s = snap["gap_pct"].reindex(scores.index)
+        if gap_filter == "Gap up ↑":
+            scores = scores[gap_s > 0]
+        elif gap_filter == "Gap down ↓":
+            scores = scores[gap_s < 0]
+
+    # Exclude today itself from historical matches
+    scores = scores[scores.index != datetime.date.today()]
+
+    min_match     = max(1, int(np.ceil(threshold * n_checkpoints)))
+    matched_scores = scores[scores >= min_match].sort_values(ascending=False)
+    matched        = snap.loc[matched_scores.index]
+
+    n = len(matched)
+    bg = "#ff4646" if n == 0 else ("#FFA743" if n < 30 else ("#ecff8b" if n < 75 else "#13ff98"))
+    n_badge_html = (
+        f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
+        f'background:{bg};font-size:12px;font-weight:400;color:#1A1A1A;">N = {n}</div>'
+    )
+    if n == 0:
+        return n_badge_html, ""
+
+    _ref     = datetime.date(2000, 1, 3)
+    today_df = _get_today_5min_live()
+
+    # Look up today's prior close once — used for both charts and today's overlay line.
+    today_prev_close = None
+    try:
+        today_ts = pd.Timestamp(datetime.date.today())
+        dl = get_spx_daily(1)
+        if not dl.empty:
+            prior_days = dl.index[dl.index < today_ts]
+            if len(prior_days) > 0:
+                today_prev_close = float(dl.loc[prior_days[-1], "Close"])
+    except Exception:
+        pass
+    # Fallback: derive from the snapshot's most recent completed day.
+    if not today_prev_close:
+        try:
+            last = snap.iloc[-1]
+            pc  = float(last["prev_close"])
+            chg = float(last["eod_chg_pct"])
+            if not (np.isnan(pc) or np.isnan(chg)):
+                today_prev_close = round(pc * (1 + chg / 100), 4)
+        except Exception:
+            pass
+
+
+    # ── Stat pills + histogram ────────────────────────────────────────────
+    eod = matched["eod_chg_pct"].dropna() if "eod_chg_pct" in matched.columns else pd.Series(dtype=float)
+    pills_html = hist_html = ""
+    if not eod.empty:
+        pills_html = _stat_pills_html(eod.mean(), eod.median(),
+                                      (eod >= 0).mean() * 100, eod.std(), margin_top=24)
+        hist_html  = _chart_html('cc-hist-chart',
+                                 _build_histogram_figure(eod, x_label="EOD % from prior close"))
+
+    # ── Overlay: matched historical days + today highlighted ──────────────
+    overlay_html = ""
+    frd5 = _load_frd_5min()
+    if not frd5.empty:
+        ofig = go.Figure()
+        all_oy: list[list[float]] = []  # collect all % arrays to compute axis range
+        for od in matched_scores.index:
+            score     = int(matched_scores.loc[od])
+            match_pct = round(score / n_checkpoints * 100)
+            opacity   = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
+            ots = pd.Timestamp(od)
+            odf = frd5.loc[ots : ots + pd.Timedelta(hours=23, minutes=59)]
+            if odf.empty:
+                continue
+            ox   = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
+            base = float(matched.loc[od, "prev_close"]) if "prev_close" in matched.columns and not pd.isna(matched.loc[od, "prev_close"]) else float(odf["Open"].iloc[0])
+            if base == 0:
+                continue
+            oy  = ((odf["Close"] / base - 1) * 100).round(2).tolist()
+            all_oy.append(oy)
+            ev  = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
+            # today-equivalent SPX price for each point: prev_close × (1 + pct/100)
+            today_equiv = (
+                [round(today_prev_close * (1 + p / 100), 2) for p in oy]
+                if today_prev_close else None
+            )
+            ofig.add_trace(go.Scatter(
+                x=ox, y=oy, mode="lines",
+                line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.9),
+                opacity=opacity, showlegend=False,
+                customdata=today_equiv,
+                hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
+                hovertemplate=(
+                    f'{_fmt_date(od)} ({match_pct}% match):'
+                    f' %{{y:+.2f}}%'
+                    + (' · %{customdata:,.2f}' if today_prev_close else '')
+                    + '<extra></extra>'
+                ),
+            ))
+        # Add today's path last so it sits on top
+        ty: list[float] = []
+        if not today_df.empty and today_prev_close:
+            if today_prev_close != 0:
+                tx = [datetime.datetime.combine(_ref, ts.time()) for ts in today_df.index]
+                ty = ((today_df["Close"] / today_prev_close - 1) * 100).round(2).tolist()
+                today_prices = today_df["Close"].round(2).tolist()
+                all_oy.append(ty)
+                ofig.add_trace(go.Scatter(
+                    x=tx, y=ty, mode="lines",
+                    name="Today", showlegend=False,
+                    line=dict(color="#4B7BFF", width=1.5),
+                    opacity=1.0,
+                    customdata=today_prices,
+                    hovertemplate='Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>',
+                ))
+        ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
+
+        # Compute % range across all traces to synchronize the price axis.
+        flat_y = [v for series in all_oy for v in series]
+        if flat_y and today_prev_close:
+            buf       = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
+            pct_min   = min(flat_y) - buf
+            pct_max   = max(flat_y) + buf
+            price_min = today_prev_close * (1 + pct_min / 100)
+            price_max = today_prev_close * (1 + pct_max / 100)
+            # Dummy invisible trace on y2 — required for Plotly to render the axis.
+            ofig.add_trace(go.Scatter(
+                x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
+                y=[price_min],
+                yaxis="y2", mode="markers",
+                marker=dict(opacity=0, size=1),
+                showlegend=False, hoverinfo="skip",
+            ))
+            yaxis_kw  = dict(
+                side="right", range=[pct_min, pct_max],
+                automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
+                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            )
+            yaxis2_kw = dict(
+                side="left", overlaying="y",
+                range=[price_min, price_max],
+                showgrid=False, tickformat=",.0f",
+                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            )
+            margin_kw = dict(l=0, r=36, t=16, b=30)
+        else:
+            # Fallback: single-axis layout (no prev_close available).
+            yaxis_kw  = dict(
+                automargin=False, showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
+                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            )
+            yaxis2_kw = {}
+            margin_kw = dict(l=48, r=0, t=16, b=30)
+
+        layout_kw: dict = dict(
+            font=dict(family="Inter, sans-serif"),
+            height=400, margin=margin_kw,
+            plot_bgcolor="white", paper_bgcolor="white",
+            hovermode="closest", hoverdistance=-1,
+            showlegend=False,
+            hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
+                            font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
+            xaxis=dict(showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
+                       tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                       ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+                       type='date',
+                       range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
+                              datetime.datetime.combine(_ref, datetime.time(16, 0))],
+                       rangeslider=dict(visible=False)),
+            yaxis=yaxis_kw,
+        )
+        if yaxis2_kw:
+            layout_kw["yaxis2"] = yaxis2_kw
+        ofig.update_layout(**layout_kw)
+
+        today_legend = (
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-bottom:8px">'
+            '<span style="display:inline-block;width:20px;height:1.5px;background:#4B7BFF;border-radius:1px;"></span>'
+            '<span style="font-size:11px;color:#555;">Today</span>'
+            '</div>'
+        ) if (not today_df.empty and today_prev_close) else ''
+        overlay_html = (
+            f'<p style="font-size:11px;color:#888;margin-top:24px;margin-bottom:0">'
+            f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
+            + today_legend
+            + _chart_html('cc-overlay-chart', ofig)
+        )
+
+    return n_badge_html, pills_html + hist_html + overlay_html
 
 
 def _apply_cc_conditions(snap, store):
@@ -890,8 +1205,8 @@ def _apply_cc_conditions(snap, store):
             continue
         ct = entry.get("type", _CC_COND_TYPES[0])
         if ct == "% change at time":
-            h_str, m_str = entry.get("time", "11:00").split(":")
-            col = f"pct_at_{int(h_str):02d}{int(m_str):02d}"
+            _h, _m = entry.get("time", "11:00").split(":")
+            col = f"pct_at_{int(_h):02d}{int(_m):02d}"
             lo, hi = float(entry.get("pct_min", -1.0)), float(entry.get("pct_max", -0.1))
             if col in snap.columns:
                 mask &= snap[col].between(lo, hi)
@@ -919,6 +1234,10 @@ def _build_cc_results_html(store) -> tuple:
     snap = _build_daily_snapshots()
     if snap.empty:
         return "", '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
+
+    if store.get("auto_mode"):
+        return _build_cc_auto_results_html(store, snap)
+
     if not store.get("ids"):
         return "", '<p style="font-size:13px;color:#aaa;padding:2px 0 8px">Add a condition above to filter historical days.</p>'
 
@@ -1154,7 +1473,7 @@ def _build_histogram_figure(eod_series: pd.Series, x_label: str = "EOD % from op
         yaxis=dict(showgrid=True, gridcolor="#F0F0F0",
                    tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                    ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                   title=dict(text="# of days", font=dict(family="Inter, sans-serif", size=11, color="#888"))),
+                   ),
         showlegend=False,
     )
     return fig

@@ -1,5 +1,125 @@
 <!-- Conditional comparison section -->
 <div>
+
+  <!-- ── Mode toggle + N badge ──────────────────────────────────────────── -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+    <div class="pill-group">
+      <label class="pill-label {% if store.auto_mode %}active{% endif %}">
+        <input type="radio" name="cc_mode" value="auto"
+               {% if store.auto_mode %}checked{% endif %}
+               hx-post="/api/study/cc"
+               hx-vals='{"action":"auto"}'
+               hx-trigger="change"
+               hx-target="#cc-section"
+               hx-swap="innerHTML"
+               style="display:none" />
+        Auto
+      </label>
+      <label class="pill-label {% if not store.auto_mode %}active{% endif %}">
+        <input type="radio" name="cc_mode" value="manual"
+               {% if not store.auto_mode %}checked{% endif %}
+               hx-post="/api/study/cc"
+               hx-vals='{"action":"manual"}'
+               hx-trigger="change"
+               hx-target="#cc-section"
+               hx-swap="innerHTML"
+               style="display:none" />
+        Manual
+      </label>
+    </div>
+    {% if n_badge_html %}
+    <div style="margin-left:auto">{{ n_badge_html | safe }}</div>
+    {% endif %}
+  </div>
+
+  {% if store.auto_mode %}
+  <!-- ── AUTO MODE ──────────────────────────────────────────────────────── -->
+
+  <!-- Controls: tolerance + match threshold -->
+  <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Tolerance ±%</p>
+      <div class="num-field-row" style="width:120px">
+        <input id="cc-auto-tol" type="number" step="0.05" value="{{ '%.2f' % store.tolerance }}"
+               class="num-field-input"
+               hx-post="/api/study/cc"
+               hx-vals='{"action":"set_tolerance"}'
+               hx-include="input"
+               hx-trigger="change"
+               hx-target="#cc-section"
+               hx-swap="innerHTML"
+               name="value" />
+        <div class="icon-btn-group">
+          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="-0.05" data-min="0.05">
+            <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
+          </button>
+          <button type="button" class="icon-btn" data-field="cc-auto-tol" data-dir="+0.05" data-min="0.05">
+            <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
+          </button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Min match</p>
+      <select class="figma-dropdown"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"set_threshold"}'
+              hx-trigger="change"
+              hx-target="#cc-section"
+              hx-swap="innerHTML"
+              name="match_threshold">
+        {% set mt = store.match_threshold | float %}
+        {% for val, label in [("0.9", "90%"), ("0.75", "75%"), ("0.6", "60%"), ("0.5", "50%")] %}
+        <option value="{{ val }}" {% if (mt - val|float)|abs < 0.01 %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+
+  <!-- Filters (gap + range) -->
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:12px 0" />
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:4px">
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
+      <div class="pill-group">
+        {% for opt in gap_opts %}
+        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
+          <input type="radio" name="cc_gap_a" value="{{ opt }}"
+                 {% if opt == (store.gap or 'All') %}checked{% endif %}
+                 hx-post="/api/study/cc"
+                 hx-vals='{"action":"filter","gap":"{{ opt }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ opt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
+      <div class="pill-group">
+        {% for opt in range_opts %}
+        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
+          <input type="radio" name="cc_range_a" value="{{ opt }}"
+                 {% if opt == (store.range or 'All') %}checked{% endif %}
+                 hx-post="/api/study/cc"
+                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ opt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- ── MANUAL MODE ────────────────────────────────────────────────────── -->
   <div style="display:flex;gap:8px;align-items:center">
     <button class="btn-outline"
             hx-post="/api/study/cc"
@@ -11,9 +131,6 @@
             hx-vals='{"action":"clear"}'
             hx-target="#cc-section"
             hx-swap="innerHTML">Clear all</button>
-    {% if n_badge_html %}
-    <div style="margin-left:auto">{{ n_badge_html | safe }}</div>
-    {% endif %}
   </div>
 
   {% for entry in store.entries %}
@@ -267,7 +384,7 @@
   </div>
   {% endfor %}
 
-  <!-- Filters + Results -->
+  <!-- Filters (only shown when conditions exist) -->
   {% if store.ids %}
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:16px">
@@ -309,5 +426,7 @@
     </div>
   </div>
   {% endif %}
+  {% endif %}{# end auto_mode / manual_mode #}
+
   {{ results_html | safe }}
 </div>
