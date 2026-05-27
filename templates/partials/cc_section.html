@@ -108,7 +108,8 @@
       <div>
         <p style="font-size:11px;color:#999;margin-bottom:8px">View</p>
         <div class="pill-group">
-          {% set sh = store.get('show_historical', True) %}
+          {% set sh = store.get('show_historical', False) %}
+          {% set lcf = store.get('line_color_filter', 'all') %}
           <label class="pill-label {% if sh %}active{% endif %}">
             <input type="checkbox"
                    {% if sh %}checked{% endif %}
@@ -119,6 +120,28 @@
                    hx-swap="innerHTML"
                    style="display:none" />
             Lines
+          </label>
+          <label class="pill-label {% if lcf == 'green' %}active{% endif %}">
+            <input type="checkbox"
+                   {% if lcf == 'green' %}checked{% endif %}
+                   hx-post="/api/study/cc"
+                   hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "green" else "green" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Green only
+          </label>
+          <label class="pill-label {% if lcf == 'red' %}active{% endif %}">
+            <input type="checkbox"
+                   {% if lcf == 'red' %}checked{% endif %}
+                   hx-post="/api/study/cc"
+                   hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "red" else "red" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Red only
           </label>
         </div>
       </div>

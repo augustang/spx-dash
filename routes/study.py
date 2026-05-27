@@ -130,7 +130,8 @@ def _get_cc_store() -> dict:
     store.setdefault("auto_mode",        True)
     store.setdefault("tolerance",        0.20)
     store.setdefault("match_threshold",  0.75)
-    store.setdefault("show_historical",  False)
+    store.setdefault("show_historical",    False)
+    store.setdefault("line_color_filter",  "all")
     return store
 
 
@@ -900,7 +901,10 @@ def api_cc_update():
         except (ValueError, TypeError):
             pass
     elif action == 'set_view':
-        store["show_historical"] = request.form.get("show_historical", "true") == "true"
+        if "show_historical" in request.form:
+            store["show_historical"] = request.form.get("show_historical") == "true"
+        if "line_color_filter" in request.form:
+            store["line_color_filter"] = request.form.get("line_color_filter", "all")
     _save_cc_store(store)
     today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
@@ -1074,7 +1078,8 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         all_oy: list[list[float]] = []
 
         # ── Overlay: historical intraday paths ────────────────────────────
-        show_historical = store.get("show_historical", True)
+        show_historical   = store.get("show_historical", False)
+        line_color_filter = store.get("line_color_filter", "all")
         for od in matched_scores.index:
             score     = int(matched_scores.loc[od])
             match_pct = round(score / n_checkpoints * 100)
@@ -1090,25 +1095,32 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 continue
             oy  = ((odf["Close"] / base - 1) * 100).round(2).tolist()
             all_oy.append(oy)
-            ev  = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
+            ev       = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
+            is_green = ev >= 0
+            color_visible = (
+                line_color_filter == "all" or
+                (line_color_filter == "green" and is_green) or
+                (line_color_filter == "red"   and not is_green)
+            )
+            trace_opacity = (base_opacity if color_visible else 0) if show_historical else 0
             today_equiv = (
                 [round(today_prev_close * (1 + p / 100), 2) for p in oy]
                 if today_prev_close else None
             )
             ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
-                line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.9),
-                opacity=base_opacity if show_historical else 0,
+                line=dict(color=GREEN_400 if is_green else "#FF3D54", width=0.9),
+                opacity=trace_opacity,
                 showlegend=False,
                 customdata=today_equiv,
-                hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
-                hoverinfo="skip" if not show_historical else None,
+                hoverlabel=dict(font=dict(color="#1E1E1E" if is_green else "white")),
+                hoverinfo="skip" if trace_opacity == 0 else None,
                 hovertemplate=(
                     f'{_fmt_date(od)} ({match_pct}% match):'
                     f' %{{y:+.2f}}%'
                     + (' · %{customdata:,.2f}' if today_prev_close else '')
                     + '<extra></extra>'
-                ) if show_historical else None,
+                ) if trace_opacity > 0 else None,
             ))
 
         # ── Today's path ──────────────────────────────────────────────────
