@@ -946,7 +946,7 @@ def _build_cc_results_html(store) -> tuple:
     # Apply time range filter
     rng_days = _CMP_RANGE_DAYS.get(store.get("range", "All"))
     if rng_days:
-        cutoff = pd.Timestamp(datetime.date.today() - datetime.timedelta(days=rng_days))
+        cutoff = datetime.date.today() - datetime.timedelta(days=rng_days)
         matched = matched[matched.index >= cutoff]
     # Apply overnight gap filter
     gap_filter = store.get("gap", "All")
