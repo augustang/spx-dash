@@ -953,10 +953,10 @@ def _build_cc_results_html(store) -> tuple:
     hist_fig = _build_histogram_figure(eod, x_label=hist_x_label)
     hist_html = _chart_html('cc-hist-chart', hist_fig)
 
-    # Intraday overlay (up to 25 most recent)
+    # Intraday overlay — all matching days
     overlay_html = ""
     frd5 = _load_frd_5min()
-    ov_dates = sorted(matched.index.tolist(), reverse=True)[:25]
+    ov_dates = sorted(matched.index.tolist(), reverse=True)
     _ref = datetime.date(2000, 1, 3)
     use_prev_close = (norm == "% from prior close")
     if ov_dates and not frd5.empty:
@@ -1003,7 +1003,7 @@ def _build_cc_results_html(store) -> tuple:
         )
         overlay_html = (
             f'<p style="font-size:11px;color:#888;margin-top:24px">'
-            f'{len(ov_dates)} most recent matching days</p>'
+            f'{len(ov_dates)} matching days</p>'
             + _chart_html('cc-overlay-chart', ofig)
         )
     return n_badge_html, pills + hist_html + overlay_html
