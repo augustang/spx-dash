@@ -1250,7 +1250,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         ) if (not today_df.empty and today_prev_close) else ''
 
         overlay_chart = _chart_html('cc-overlay-chart', ofig)
-        hist_chart    = _chart_html('cc-hist-chart', histfig) if not histfig.data == () else ''
+        hist_chart    = _chart_html('cc-hist-chart', histfig) if len(histfig.data) > 0 else ''
         megachart_html = (
             f'<p style="font-size:11px;color:#888;margin-top:24px;margin-bottom:0">'
             f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
