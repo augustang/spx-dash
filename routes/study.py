@@ -1066,10 +1066,12 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     megachart_html = ""
     frd5 = _load_frd_5min()
     if not frd5.empty:
+        # shared_yaxes=False gives each panel its own independent hover area;
+        # we sync ranges manually so the 0% gridline still aligns.
         megafig = make_subplots(
             rows=1, cols=2,
             column_widths=[0.80, 0.20],
-            shared_yaxes=True,
+            shared_yaxes=False,
             horizontal_spacing=0.02,
         )
         all_oy: list[list[float]] = []
@@ -1133,20 +1135,31 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             pct_max   = max(flat_y) + buf
             price_min = today_prev_close * (1 + pct_min / 100)
             price_max = today_prev_close * (1 + pct_max / 100)
-            # Dummy trace to force price axis (yaxis2) to render.
+            # Dummy invisible trace forces the price axis (yaxis3) to render.
             megafig.add_trace(go.Scatter(
                 x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
                 y=[price_min],
-                yaxis="y2", mode="markers",
+                yaxis="y3", mode="markers",
                 marker=dict(opacity=0, size=1),
                 showlegend=False, hoverinfo="skip",
             ))
-            shared_y_kw = dict(
-                side="right", range=[pct_min, pct_max],
-                showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
+            # Left panel: % axis, no tick labels (labels live on right panel)
+            left_y_kw = dict(
+                range=[pct_min, pct_max],
+                showgrid=True, gridcolor="#F0F0F0",
+                showticklabels=False,
+                ticks="", ticklen=0,
+            )
+            # Right panel: % axis with tick labels on the far right
+            right_y_kw = dict(
+                range=[pct_min, pct_max],
+                side="right",
+                showgrid=False,
+                ticksuffix="%",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             )
+            # Price overlay on the far left of the left panel
             price_axis_kw = dict(
                 side="left", overlaying="y",
                 range=[price_min, price_max],
@@ -1157,9 +1170,13 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             margin_kw = dict(l=0, r=36, t=16, b=30)
         else:
             pct_min = pct_max = None
-            shared_y_kw  = dict(
-                side="right",
-                showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
+            left_y_kw = dict(
+                showgrid=True, gridcolor="#F0F0F0",
+                showticklabels=False, ticks="", ticklen=0,
+            )
+            right_y_kw = dict(
+                side="right", showgrid=False,
+                ticksuffix="%",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             )
@@ -1207,10 +1224,11 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=4, tickcolor="rgba(0,0,0,0)",
             ),
-            yaxis=shared_y_kw,
+            yaxis=left_y_kw,
+            yaxis2=right_y_kw,
         )
         if price_axis_kw:
-            layout_kw["yaxis2"] = price_axis_kw
+            layout_kw["yaxis3"] = price_axis_kw
         megafig.update_layout(**layout_kw)
 
         today_legend = (
