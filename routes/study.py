@@ -1158,6 +1158,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         else:
             pct_min = pct_max = None
             shared_y_kw  = dict(
+                side="right",
                 showgrid=True, gridcolor="#F0F0F0", ticksuffix="%",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
@@ -1202,7 +1203,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 rangeslider=dict(visible=False),
             ),
             xaxis2=dict(
-                showgrid=False,
+                showgrid=False, autorange="reversed",
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=4, tickcolor="rgba(0,0,0,0)",
             ),
