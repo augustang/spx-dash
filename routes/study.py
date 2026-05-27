@@ -1207,8 +1207,8 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 marker_line_width=0,
                 width=bsz * 0.85,
                 showlegend=False,
-                text=hover_text,
-                hovertemplate="%{text}<extra></extra>",
+                hovertext=hover_text,
+                hovertemplate="%{hovertext}<extra></extra>",
             ), row=1, col=2)
 
         megafig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
