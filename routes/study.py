@@ -1219,7 +1219,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             histfig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
             histfig.update_layout(
                 font=dict(family="Inter, sans-serif"),
-                height=400, margin=dict(l=12, r=36, t=16, b=30),
+                height=400, margin=dict(l=0, r=36, t=16, b=30),
                 plot_bgcolor="white", paper_bgcolor="white",
                 hovermode="closest",
                 showlegend=False,
@@ -1255,7 +1255,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             + today_legend
             + f'<div style="display:flex;gap:0;width:100%">'
             + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
-            + f'<div style="flex:0.5;min-width:0">{hist_chart}</div>'
+            + f'<div style="flex:0.5;min-width:0;margin-left:-4px">{hist_chart}</div>'
             + '</div>'
         )
 
