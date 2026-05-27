@@ -1081,6 +1081,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             base_opacity = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
             ots = pd.Timestamp(od)
             odf = frd5.loc[ots : ots + pd.Timedelta(hours=23, minutes=59)]
+            odf = odf[odf.index.time <= datetime.time(16, 0)]
             if odf.empty:
                 continue
             ox   = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
@@ -1113,6 +1114,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         # ── Today's path ──────────────────────────────────────────────────
         ty: list[float] = []
         if not today_df.empty and today_prev_close:
+            today_df = today_df[today_df.index.time <= datetime.time(16, 0)]
             if today_prev_close != 0:
                 tx = [datetime.datetime.combine(_ref, ts.time()) for ts in today_df.index]
                 ty = ((today_df["Close"] / today_prev_close - 1) * 100).round(2).tolist()
