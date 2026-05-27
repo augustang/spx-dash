@@ -1075,10 +1075,10 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
 
         # ── Overlay: historical intraday paths ────────────────────────────
         show_historical = store.get("show_historical", True)
-        for od in matched_scores.index if show_historical else []:
+        for od in matched_scores.index:
             score     = int(matched_scores.loc[od])
             match_pct = round(score / n_checkpoints * 100)
-            opacity   = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
+            base_opacity = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
             ots = pd.Timestamp(od)
             odf = frd5.loc[ots : ots + pd.Timedelta(hours=23, minutes=59)]
             if odf.empty:
@@ -1097,15 +1097,17 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             ofig.add_trace(go.Scatter(
                 x=ox, y=oy, mode="lines",
                 line=dict(color=GREEN_400 if ev >= 0 else "#FF3D54", width=0.9),
-                opacity=opacity, showlegend=False,
+                opacity=base_opacity if show_historical else 0,
+                showlegend=False,
                 customdata=today_equiv,
                 hoverlabel=dict(font=dict(color="#1E1E1E" if ev >= 0 else "white")),
+                hoverinfo="skip" if not show_historical else None,
                 hovertemplate=(
                     f'{_fmt_date(od)} ({match_pct}% match):'
                     f' %{{y:+.2f}}%'
                     + (' · %{customdata:,.2f}' if today_prev_close else '')
                     + '<extra></extra>'
-                ),
+                ) if show_historical else None,
             ))
 
         # ── Today's path ──────────────────────────────────────────────────
