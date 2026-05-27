@@ -113,8 +113,20 @@ def _get_cmp_store() -> dict:
 
 def _get_cc_store() -> dict:
     if 'cc' not in session:
-        session['cc'] = dict(_DEFAULT_CC_STORE)
-    return session['cc']
+        session['cc'] = {
+            "ids": [], "next_id": 0, "entries": [],
+            "range": "All", "gap": "All", "norm": "% from prior close",
+        }
+    store = session['cc']
+    # Sanitize: drop any entry whose type got corrupted (e.g. set to a time
+    # string due to the hx-include="select" multi-value bug).
+    valid_types = set(_CC_COND_TYPES)
+    bad_ids = {e["id"] for e in store.get("entries", []) if e.get("type") not in valid_types}
+    if bad_ids:
+        store["entries"] = [e for e in store["entries"] if e["id"] not in bad_ids]
+        store["ids"]     = [i for i in store.get("ids", []) if i not in bad_ids]
+        session.modified = True
+    return store
 
 
 def _save_cmp_store(s: dict) -> None:

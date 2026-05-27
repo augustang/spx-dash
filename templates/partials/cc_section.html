@@ -26,7 +26,6 @@
       <select class="figma-dropdown"
               hx-post="/api/study/cc"
               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"type"}'
-              hx-include="select"
               hx-target="#cc-section"
               hx-swap="innerHTML"
               name="value">
@@ -43,7 +42,6 @@
       <select class="figma-dropdown"
               hx-post="/api/study/cc"
               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"time"}'
-              hx-include="select"
               hx-trigger="change"
               hx-target="#cc-section"
               hx-swap="innerHTML"
@@ -104,7 +102,6 @@
       <select class="figma-dropdown"
               hx-post="/api/study/cc"
               hx-vals='{"action":"update","id":"{{ entry.id }}","field":"event"}'
-              hx-include="select"
               hx-trigger="change"
               hx-target="#cc-section"
               hx-swap="innerHTML"
