@@ -1128,6 +1128,15 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                     customdata=today_prices,
                     hovertemplate='Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>',
                 ))
+                # Trailing dot at the last point of today's line
+                ofig.add_trace(go.Scatter(
+                    x=[tx[-1]], y=[ty[-1]], mode="markers",
+                    marker=dict(
+                        color="#4B7BFF", size=4,
+                        line=dict(color="rgba(75,123,255,0.3)", width=8),
+                    ),
+                    showlegend=False, hoverinfo="skip",
+                ))
 
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
 
