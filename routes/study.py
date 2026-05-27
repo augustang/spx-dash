@@ -1158,7 +1158,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
                 ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
             )
-            overlay_margin = dict(l=0, r=0, t=16, b=30)
+            overlay_margin = dict(l=0, r=20, t=16, b=30)
         else:
             pct_min = pct_max = None
             overlay_yaxis_kw  = dict(
@@ -1167,7 +1167,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 automargin=False,
             )
             overlay_yaxis2_kw = {}
-            overlay_margin    = dict(l=0, r=0, t=16, b=30)
+            overlay_margin    = dict(l=0, r=20, t=16, b=30)
 
         overlay_layout: dict = dict(
             font=dict(family="Inter, sans-serif"),
@@ -1255,7 +1255,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             + today_legend
             + f'<div style="display:flex;gap:0;width:100%">'
             + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
-            + f'<div style="flex:0.5;min-width:0;margin-left:-4px">{hist_chart}</div>'
+            + f'<div style="flex:0.5;min-width:0;margin-left:-24px">{hist_chart}</div>'
             + '</div>'
         )
 
