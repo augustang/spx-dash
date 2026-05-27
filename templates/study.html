@@ -75,18 +75,11 @@
     </div>
   </div>
 
-  <!-- 4. Event comparison -->
-  <div class="section-label">Event comparison</div>
-  <div class="card mb-4">
-    <div class="card-body">
-      <div id="cmp-section"
-           hx-get="/api/study/cmp"
-           hx-trigger="load delay:600ms"
-           hx-swap="innerHTML">
-        <div class="loading-placeholder" style="height:100px">Loading…</div>
-      </div>
-    </div>
-  </div>
+  <!-- 4. Event comparison (hidden) -->
+  <div id="cmp-section" style="display:none"
+       hx-get="/api/study/cmp"
+       hx-trigger="none"
+       hx-swap="innerHTML"></div>
 
   <!-- 5–8: lazy-load on scroll into view (intersect once) -->
 
