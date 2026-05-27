@@ -127,9 +127,10 @@ def _get_cc_store() -> dict:
         store["ids"]     = [i for i in store.get("ids", []) if i not in bad_ids]
         session.modified = True
     # Ensure auto-mode keys exist for sessions created before this feature.
-    store.setdefault("auto_mode",       True)
-    store.setdefault("tolerance",       0.20)
-    store.setdefault("match_threshold", 0.75)
+    store.setdefault("auto_mode",        True)
+    store.setdefault("tolerance",        0.20)
+    store.setdefault("match_threshold",  0.75)
+    store.setdefault("show_historical",  True)
     return store
 
 
@@ -898,6 +899,8 @@ def api_cc_update():
             store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.10)), 2))
         except (ValueError, TypeError):
             pass
+    elif action == 'set_view':
+        store["show_historical"] = request.form.get("show_historical", "true") == "true"
     _save_cc_store(store)
     today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
@@ -1071,7 +1074,8 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
         all_oy: list[list[float]] = []
 
         # ── Overlay: historical intraday paths ────────────────────────────
-        for od in matched_scores.index:
+        show_historical = store.get("show_historical", True)
+        for od in matched_scores.index if show_historical else []:
             score     = int(matched_scores.loc[od])
             match_pct = round(score / n_checkpoints * 100)
             opacity   = 0.12 + (score / n_checkpoints) * 0.55  # 0.12–0.67
