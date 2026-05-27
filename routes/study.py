@@ -1252,7 +1252,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             )
 
         today_legend = (
-            '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;margin-bottom:0">'
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:12px;margin-bottom:0">'
             '<span style="display:inline-block;width:20px;height:1.5px;background:#4B7BFF;border-radius:1px;"></span>'
             '<span style="font-size:11px;color:#555;">Today</span>'
             '</div>'
@@ -1265,9 +1265,9 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
             + f'<div style="flex:0.5;min-width:0;margin-left:-4px">{hist_chart}</div>'
             + '</div>'
-            + f'<p style="font-size:11px;color:#888;margin-top:6px;margin-bottom:0">'
-            f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
             + today_legend
+            + f'<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
+            f'{n} days matching ≥{int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
         )
 
     return n_badge_html, pills_html + megachart_html
