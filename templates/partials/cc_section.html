@@ -86,39 +86,41 @@
         {% endfor %}
       </div>
     </div>
-    <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
-      <div class="pill-group">
-        {% for opt in range_opts %}
-        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
-          <input type="radio" name="cc_range_a" value="{{ opt }}"
-                 {% if opt == (store.range or 'All') %}checked{% endif %}
-                 hx-post="/api/study/cc"
-                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
-                 hx-trigger="change"
-                 hx-target="#cc-section"
-                 hx-swap="innerHTML"
-                 style="display:none" />
-          {{ opt }}
-        </label>
-        {% endfor %}
+    <div style="display:flex;gap:24px;align-items:flex-end">
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
+        <div class="pill-group">
+          {% for opt in range_opts %}
+          <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
+            <input type="radio" name="cc_range_a" value="{{ opt }}"
+                   {% if opt == (store.range or 'All') %}checked{% endif %}
+                   hx-post="/api/study/cc"
+                   hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            {{ opt }}
+          </label>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">View</p>
-      <div class="pill-group">
-        {% set sh = store.get('show_historical', True) %}
-        <label class="pill-label {% if sh %}active{% endif %}">
-          <input type="checkbox"
-                 {% if sh %}checked{% endif %}
-                 hx-post="/api/study/cc"
-                 hx-vals='{"action":"set_view","show_historical":"{{ "false" if sh else "true" }}"}'
-                 hx-trigger="change"
-                 hx-target="#cc-section"
-                 hx-swap="innerHTML"
-                 style="display:none" />
-          Lines
-        </label>
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">View</p>
+        <div class="pill-group">
+          {% set sh = store.get('show_historical', True) %}
+          <label class="pill-label {% if sh %}active{% endif %}">
+            <input type="checkbox"
+                   {% if sh %}checked{% endif %}
+                   hx-post="/api/study/cc"
+                   hx-vals='{"action":"set_view","show_historical":"{{ "false" if sh else "true" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Lines
+          </label>
+        </div>
       </div>
     </div>
   </div>
