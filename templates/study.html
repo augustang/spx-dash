@@ -62,14 +62,14 @@
     <div class="loading-placeholder" style="height:300px">Loading…</div>
   </div>
 
-  <!-- 3. Event comparison -->
   <!-- 3. Conditional comparison -->
+  <!-- load delayed so long-chart + intraday (above fold) get first priority -->
   <div class="section-label">Conditional comparison</div>
   <div class="card mb-4">
     <div class="card-body">
       <div id="cc-section"
            hx-get="/api/study/cc"
-           hx-trigger="load"
+           hx-trigger="load delay:300ms"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:100px">Loading…</div>
       </div>
@@ -82,12 +82,14 @@
     <div class="card-body">
       <div id="cmp-section"
            hx-get="/api/study/cmp"
-           hx-trigger="load"
+           hx-trigger="load delay:600ms"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:100px">Loading…</div>
       </div>
     </div>
   </div>
+
+  <!-- 5–8: lazy-load on scroll into view (intersect once) -->
 
   <!-- 5. Event impact -->
   <div class="section-label">Event impact</div>
@@ -95,7 +97,7 @@
     <div class="card-body"
          id="event-impact"
          hx-get="/api/study/event-impact"
-         hx-trigger="load"
+         hx-trigger="intersect once"
          hx-swap="innerHTML">
       <div class="loading-placeholder" style="height:80px">Loading…</div>
     </div>
@@ -107,7 +109,7 @@
     <div class="card-body"
          id="key-dates"
          hx-get="/api/study/key-dates"
-         hx-trigger="load"
+         hx-trigger="intersect once"
          hx-swap="innerHTML">
       <div class="loading-placeholder" style="height:80px">Loading…</div>
     </div>
@@ -119,7 +121,7 @@
     <div class="card-body"
          id="notable-events"
          hx-get="/api/study/notable-events"
-         hx-trigger="load"
+         hx-trigger="intersect once"
          hx-swap="innerHTML">
       <div class="loading-placeholder" style="height:80px">Loading…</div>
     </div>
@@ -131,7 +133,7 @@
     <div class="card-body"
          id="big-moves"
          hx-get="/api/study/big-moves"
-         hx-trigger="load"
+         hx-trigger="intersect once"
          hx-swap="innerHTML">
       <div class="loading-placeholder" style="height:80px">Loading…</div>
     </div>

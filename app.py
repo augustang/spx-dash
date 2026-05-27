@@ -45,6 +45,26 @@ cache.init_app(app)
 app.register_blueprint(trading_bp)
 app.register_blueprint(study_bp)
 
+# ── Cache pre-warm ───────────────────────────────────────────────────────────
+# Run expensive first-time builds in a background thread so that the first
+# real user request hits a warm cache instead of waiting several seconds.
+def _prewarm_caches():
+    import threading, time
+    def _run():
+        try:
+            # Small delay so the Flask app finishes startup before we hit it
+            time.sleep(2)
+            with app.app_context():
+                from routes.study import _build_daily_snapshots, _build_long_chart_html
+                _build_daily_snapshots()
+                for r in ('1Y', '2Y', '5Y'):
+                    _build_long_chart_html(r, False, False)
+        except Exception as exc:
+            print(f"⚠️  Cache pre-warm error: {exc}")
+    threading.Thread(target=_run, daemon=True).start()
+
+_prewarm_caches()
+
 _DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
 
