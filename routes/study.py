@@ -56,7 +56,7 @@ try:
 except (FileNotFoundError, json.JSONDecodeError):
     _INTRADAY_NOTES = {}
 
-_CC_SNAP_TIMES = [(10, 0), (10, 30), (11, 0), (11, 30), (12, 0), (13, 0), (14, 0), (15, 0)]
+_CC_SNAP_TIMES = [(h, m) for h in range(9, 16) for m in (0, 30) if (h, m) >= (9, 30) and (h, m) <= (15, 30)]
 _CC_TIME_OPTS  = [f"{h}:{m:02d}" for h, m in _CC_SNAP_TIMES]
 _CC_COND_TYPES = ["% change at time", "Days from event", "Day of week", "Month", "Overnight gap"]
 _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
