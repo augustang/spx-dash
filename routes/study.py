@@ -1247,7 +1247,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             + today_legend
             + f'<div style="display:flex;gap:0;width:100%">'
             + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
-            + f'<div style="flex:1;min-width:0">{hist_chart}</div>'
+            + f'<div style="flex:0.5;min-width:0">{hist_chart}</div>'
             + '</div>'
         )
 
