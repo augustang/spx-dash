@@ -903,10 +903,10 @@ def api_cc_update():
     elif action == 'set_view':
         if "show_historical" in request.form:
             store["show_historical"] = request.form.get("show_historical") == "true"
-            if not store["show_historical"]:
-                store["line_color_filter"] = "all"
         if "line_color_filter" in request.form:
             store["line_color_filter"] = request.form.get("line_color_filter", "all")
+            if store["line_color_filter"] != "all":
+                store["show_historical"] = True
     _save_cc_store(store)
     today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
     n_badge_html, results_html = _build_cc_results_html(store)
