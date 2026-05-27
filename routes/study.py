@@ -937,7 +937,7 @@ def _build_cc_results_html(store) -> tuple:
     if n == 0:
         return n_badge_html, ""
 
-    norm = store.get("norm", "% from prior close")
+    norm = "% from prior close"
     eod_col = "eod_chg_pct" if norm == "% from prior close" else "eod_pct"
     eod = matched[eod_col].dropna() if eod_col in matched.columns else matched["eod_pct"].dropna()
     if eod.empty:
