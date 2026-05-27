@@ -890,7 +890,8 @@ def _apply_cc_conditions(snap, store):
             continue
         ct = entry.get("type", _CC_COND_TYPES[0])
         if ct == "% change at time":
-            col = "pct_at_" + entry.get("time", "11:00").replace(":", "")
+            h_str, m_str = entry.get("time", "11:00").split(":")
+            col = f"pct_at_{int(h_str):02d}{int(m_str):02d}"
             lo, hi = float(entry.get("pct_min", -1.0)), float(entry.get("pct_max", -0.1))
             if col in snap.columns:
                 mask &= snap[col].between(lo, hi)
