@@ -249,7 +249,12 @@ var _updatingToast = null;
 
 // Auto-poll and page-load endpoints that should not trigger the toast
 var _SKIP_PATHS = ['/api/trading/metrics', '/api/trading/spreads',
-                   '/api/trading/inputs'];
+                   '/api/trading/inputs',
+                   // Study sections that auto-load on scroll (intersect once)
+                   '/api/study/event-impact', '/api/study/key-dates',
+                   '/api/study/notable-events', '/api/study/big-moves',
+                   // Study sections that load on page init (load delay)
+                   '/api/study/long-chart', '/api/study/intraday'];
 
 // Endpoints that auto-poll (every Ns) — show "Refreshing data..." when
 // triggered by HTMX's internal timer (triggeringEvent is null/undefined)
@@ -258,8 +263,8 @@ var _POLL_PATHS = ['/api/trading/trade', '/api/trading/day-chart',
 
 function _isSkippedRequest(cfg) {
   var path    = (cfg || {}).path || '';
-  var evtType = cfg.triggeringEvent && cfg.triggeringEvent.type;
-  if (evtType === 'load') return true;
+  var evtType = cfg && cfg.triggeringEvent && cfg.triggeringEvent.type;
+  if (evtType === 'load' || evtType === 'intersect') return true;
   return _SKIP_PATHS.some(function(p) { return path.indexOf(p) !== -1; });
 }
 
@@ -327,10 +332,37 @@ document.addEventListener('htmx:beforeRequest', function(e) {
 });
 
 document.addEventListener('htmx:afterSettle', function(e) {
-  if (_isSkippedRequest(e.detail.requestConfig)) return;
+  if (_isSkippedRequest(e.detail && e.detail.requestConfig)) return;
   if (!_updatingToast || !document.body.contains(_updatingToast)) return;
   if (_confirmTimer) clearTimeout(_confirmTimer);
   _confirmTimer = setTimeout(_showConfirmToast, 400);
+});
+
+// Dismiss the updating toast silently when a request is aborted or errors out
+// (htmx:afterSettle never fires for failed requests, so the toast would get stuck).
+document.addEventListener('htmx:sendError', function(e) {
+  var cfg = e.detail && e.detail.requestConfig;
+  if (_isSkippedRequest(cfg)) return;
+  if (_confirmTimer) { clearTimeout(_confirmTimer); _confirmTimer = null; }
+  if (_updatingToast && document.body.contains(_updatingToast)) {
+    _updatingToast.style.transition = 'opacity 0.2s ease';
+    _updatingToast.style.opacity = '0';
+    var _t = _updatingToast;
+    setTimeout(function() { if (_t.parentNode) _t.parentNode.removeChild(_t); }, 200);
+    _updatingToast = null;
+  }
+});
+document.addEventListener('htmx:responseError', function(e) {
+  var cfg = e.detail && e.detail.requestConfig;
+  if (_isSkippedRequest(cfg)) return;
+  if (_confirmTimer) { clearTimeout(_confirmTimer); _confirmTimer = null; }
+  if (_updatingToast && document.body.contains(_updatingToast)) {
+    _updatingToast.style.transition = 'opacity 0.2s ease';
+    _updatingToast.style.opacity = '0';
+    var _t = _updatingToast;
+    setTimeout(function() { if (_t.parentNode) _t.parentNode.removeChild(_t); }, 200);
+    _updatingToast = null;
+  }
 });
 
 // Cache of rendered chart elements keyed by ID. When htmx swaps a section,
