@@ -23,7 +23,9 @@
        hx-get="/api/study/intraday?date={{ yesterday }}"
        hx-trigger="load delay:200ms"
        hx-swap="innerHTML">
-    <div class="loading-placeholder" style="height:300px">Loading…</div>
+    <div class="card"><div class="card-body">
+      <div class="loading-placeholder" style="height:300px">Loading…</div>
+    </div></div>
   </div>
 
   <!-- 3. Long-term chart -->
