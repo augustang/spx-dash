@@ -128,7 +128,7 @@ def _get_cc_store() -> dict:
         session.modified = True
     # Ensure auto-mode keys exist for sessions created before this feature.
     store.setdefault("auto_mode",       True)
-    store.setdefault("tolerance",       0.10)
+    store.setdefault("tolerance",       0.20)
     store.setdefault("match_threshold", 0.75)
     return store
 

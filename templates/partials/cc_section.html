@@ -4,28 +4,16 @@
   <!-- ── Mode toggle + N badge ──────────────────────────────────────────── -->
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
     <div class="pill-group">
-      <label class="pill-label {% if store.auto_mode %}active{% endif %}">
-        <input type="radio" name="cc_mode" value="auto"
-               {% if store.auto_mode %}checked{% endif %}
-               hx-post="/api/study/cc"
-               hx-vals='{"action":"auto"}'
-               hx-trigger="change"
-               hx-target="#cc-section"
-               hx-swap="innerHTML"
-               style="display:none" />
-        Auto
-      </label>
-      <label class="pill-label {% if not store.auto_mode %}active{% endif %}">
-        <input type="radio" name="cc_mode" value="manual"
-               {% if not store.auto_mode %}checked{% endif %}
-               hx-post="/api/study/cc"
-               hx-vals='{"action":"manual"}'
-               hx-trigger="change"
-               hx-target="#cc-section"
-               hx-swap="innerHTML"
-               style="display:none" />
-        Manual
-      </label>
+      <button class="pill-label {% if store.auto_mode %}active{% endif %}"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"auto"}'
+              hx-target="#cc-section"
+              hx-swap="innerHTML">Auto</button>
+      <button class="pill-label {% if not store.auto_mode %}active{% endif %}"
+              hx-post="/api/study/cc"
+              hx-vals='{"action":"manual"}'
+              hx-target="#cc-section"
+              hx-swap="innerHTML">Manual</button>
     </div>
     {% if n_badge_html %}
     <div style="margin-left:auto">{{ n_badge_html | safe }}</div>
