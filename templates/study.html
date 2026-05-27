@@ -4,12 +4,12 @@
 {% block content %}
 <div>
 
-  <!-- 1. Conditional comparison -->
-  <div class="section-label">Conditional comparison</div>
+  <!-- 1. Day match (auto CC megachart) -->
+  <div class="section-label">Day match</div>
   <div class="card mb-4">
     <div class="card-body">
-      <div id="cc-section"
-           hx-get="/api/study/cc"
+      <div id="cc-auto-section"
+           hx-get="/api/study/cc/auto"
            hx-trigger="load"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:100px">Loading…</div>
@@ -28,7 +28,20 @@
     </div></div>
   </div>
 
-  <!-- 3. Long-term chart -->
+  <!-- 3. Conditional comparison (manual) -->
+  <div class="section-label">Conditional comparison</div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div id="cc-manual-section"
+           hx-get="/api/study/cc/manual"
+           hx-trigger="load delay:300ms"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder" style="height:100px">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Long-term chart -->
   <div class="section-label">Long-term chart</div>
   <div class="card mb-4">
     <div class="card-body">
@@ -77,15 +90,15 @@
     </div>
   </div>
 
-  <!-- 4. Event comparison (hidden) -->
+  <!-- 5. Event comparison (hidden) -->
   <div id="cmp-section" style="display:none"
        hx-get="/api/study/cmp"
        hx-trigger="none"
        hx-swap="innerHTML"></div>
 
-  <!-- 5–8: lazy-load on scroll into view (intersect once) -->
+  <!-- 6–9: lazy-load on scroll into view (intersect once) -->
 
-  <!-- 5. Event impact -->
+  <!-- 6. Event impact -->
   <div class="section-label">Event impact</div>
   <div class="card mb-4">
     <div class="card-body"
@@ -97,7 +110,7 @@
     </div>
   </div>
 
-  <!-- 6. Key dates -->
+  <!-- 7. Key dates -->
   <div class="section-label">Key dates</div>
   <div class="card mb-4">
     <div class="card-body"
@@ -109,7 +122,7 @@
     </div>
   </div>
 
-  <!-- 7. Notable events -->
+  <!-- 8. Notable events -->
   <div class="section-label">Notable events</div>
   <div class="card mb-4">
     <div class="card-body"
@@ -121,7 +134,7 @@
     </div>
   </div>
 
-  <!-- 8. Intraday moves ±1.5% -->
+  <!-- 9. Intraday moves ±1.5% -->
   <div class="section-label">Intraday moves ±1.5%</div>
   <div class="card mb-4">
     <div class="card-body"
@@ -152,8 +165,8 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
   if (target && target.id === 'long-chart-container') {
     target.innerHTML = '<div class="loading-placeholder" style="height:500px">Loading\u2026</div>';
   }
-  // Dim the CC section while a request is in flight so users get feedback.
-  if (target && target.id === 'cc-section') {
+  // Dim CC sections while a request is in flight so users get feedback.
+  if (target && (target.id === 'cc-auto-section' || target.id === 'cc-manual-section')) {
     target.style.opacity = '0.45';
     target.style.pointerEvents = 'none';
   }
@@ -161,7 +174,7 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
 
 document.body.addEventListener('htmx:afterSwap', function(e) {
   var target = e.detail.target;
-  if (target && target.id === 'cc-section') {
+  if (target && (target.id === 'cc-auto-section' || target.id === 'cc-manual-section')) {
     target.style.opacity = '';
     target.style.pointerEvents = '';
   }
@@ -170,17 +183,21 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 // Abort in-flight CC requests when a newer one starts to prevent pile-up
 // from rapid stepper clicks or filter changes.
 (function() {
-  var _ccXhr = null;
+  var _autoXhr = null, _manualXhr = null;
   document.body.addEventListener('htmx:beforeRequest', function(e) {
-    if (e.detail.target && e.detail.target.id === 'cc-section') {
-      if (_ccXhr) { try { _ccXhr.abort(); } catch(_) {} }
-      _ccXhr = e.detail.xhr || null;
+    var id = e.detail.target && e.detail.target.id;
+    if (id === 'cc-auto-section') {
+      if (_autoXhr) { try { _autoXhr.abort(); } catch(_) {} }
+      _autoXhr = e.detail.xhr || null;
+    } else if (id === 'cc-manual-section') {
+      if (_manualXhr) { try { _manualXhr.abort(); } catch(_) {} }
+      _manualXhr = e.detail.xhr || null;
     }
   });
   document.body.addEventListener('htmx:afterRequest', function(e) {
-    if (e.detail.target && e.detail.target.id === 'cc-section') {
-      _ccXhr = null;
-    }
+    var id = e.detail.target && e.detail.target.id;
+    if (id === 'cc-auto-section') _autoXhr = null;
+    else if (id === 'cc-manual-section') _manualXhr = null;
   });
 })();
 </script>

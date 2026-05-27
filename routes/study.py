@@ -949,6 +949,146 @@ def api_cc_get():
     )
 
 
+def _render_cc_auto(store):
+    """Build and return the rendered auto-mode CC partial."""
+    snap = _build_daily_snapshots()
+    if snap.empty:
+        n_badge_html, results_html = "", '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
+    else:
+        n_badge_html, results_html = _build_cc_auto_results_html(store, snap)
+    return render_template('partials/cc_auto_section.html',
+        store=store,
+        range_opts=_CMP_RANGE_OPTS,
+        gap_opts=_CMP_GAP_OPTS,
+        n_badge_html=n_badge_html,
+        results_html=results_html,
+    )
+
+
+def _render_cc_manual(store):
+    """Build and return the rendered manual-mode CC partial."""
+    # Force manual-mode result path by temporarily masking auto_mode
+    _real = store.get("auto_mode")
+    store["auto_mode"] = False
+    n_badge_html, results_html = _build_cc_results_html(store)
+    store["auto_mode"] = _real
+    return render_template('partials/cc_manual_section.html',
+        store=store,
+        cond_types=_CC_COND_TYPES,
+        event_opts=_CC_EVENT_OPTS,
+        time_opts=_CC_TIME_OPTS,
+        dow_labels=_CC_DOW_LABELS,
+        mon_labels=_CC_MON_LABELS,
+        range_opts=_CMP_RANGE_OPTS,
+        gap_opts=_CMP_GAP_OPTS,
+        norm_opts=_CC_NORM_OPTS,
+        n_badge_html=n_badge_html,
+        results_html=results_html,
+    )
+
+
+@study_bp.route('/api/study/cc/auto', methods=['GET', 'POST'])
+def api_cc_auto():
+    store = _get_cc_store()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'set_threshold':
+            try:
+                store["match_threshold"] = float(request.form.get("match_threshold", 0.75))
+            except (ValueError, TypeError):
+                pass
+        elif action == 'set_tolerance':
+            try:
+                store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.20)), 2))
+            except (ValueError, TypeError):
+                pass
+        elif action == 'filter':
+            store["range"] = request.form.get('range', store.get("range", "All"))
+            store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
+        elif action == 'set_view':
+            if "show_historical" in request.form:
+                store["show_historical"] = request.form.get("show_historical") == "true"
+                if not store["show_historical"]:
+                    store["line_color_filter"] = "all"
+            if "line_color_filter" in request.form:
+                store["line_color_filter"] = request.form.get("line_color_filter", "all")
+                if store["line_color_filter"] != "all":
+                    store["show_historical"] = True
+        _save_cc_store(store)
+    return _render_cc_auto(store)
+
+
+@study_bp.route('/api/study/cc/manual', methods=['GET', 'POST'])
+def api_cc_manual():
+    store = _get_cc_store()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            cid = store["next_id"]
+            store["next_id"] += 1
+            store["ids"].append(cid)
+            store["entries"].append({
+                "id": cid, "type": _CC_COND_TYPES[0], "enabled": True,
+                "time": "11:00", "pct_min": 0.2, "pct_max": 0.4,
+                "event": "VIX Exp", "days_min": -3, "days_max": 3,
+                "gap_min": -1.0, "gap_max": 1.0,
+                "dow": list(range(5)), "months": list(range(1, 13)),
+            })
+        elif action == 'clear':
+            store["ids"] = []
+            store["entries"] = []
+        elif action == 'delete':
+            cid = int(request.form.get('id', -1))
+            store["entries"] = [e for e in store["entries"] if e["id"] != cid]
+            store["ids"]     = [i for i in store["ids"]     if i != cid]
+        elif action == 'update':
+            cid   = int(request.form.get('id', -1))
+            field = request.form.get('field')
+            value = request.form.get('value')
+            for entry in store["entries"]:
+                if entry["id"] == cid and field:
+                    if field in ("pct_min", "pct_max", "gap_min", "gap_max"):
+                        try:
+                            entry[field] = float(value)
+                        except (ValueError, TypeError):
+                            pass
+                    elif field in ("days_min", "days_max"):
+                        try:
+                            entry[field] = int(value)
+                        except (ValueError, TypeError):
+                            pass
+                    elif field == "enabled":
+                        entry["enabled"] = value == "true"
+                    elif field == "dow_toggle":
+                        idx = int(value)
+                        dow = list(entry.get("dow", []))
+                        if idx in dow:
+                            dow.remove(idx)
+                        else:
+                            dow.append(idx)
+                        entry["dow"] = sorted(dow)
+                    elif field == "month_toggle":
+                        mo = int(value)
+                        months = list(entry.get("months", []))
+                        if mo in months:
+                            months.remove(mo)
+                        else:
+                            months.append(mo)
+                        entry["months"] = sorted(months)
+                    elif field in ("dow", "months"):
+                        try:
+                            entry[field] = json.loads(value)
+                        except Exception:
+                            pass
+                    else:
+                        entry[field] = value
+        elif action == 'filter':
+            store["range"] = request.form.get('range', store.get("range", "All"))
+            store["gap"]   = request.form.get('gap',   store.get("gap",   "All"))
+        _save_cc_store(store)
+    return _render_cc_manual(store)
+
+
 def _compute_today_checkpoints() -> list:
     """Return completed half-hour checkpoints for today as [(time_str, pct_from_prior_close), ...]."""
     import pytz
