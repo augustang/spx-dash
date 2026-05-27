@@ -5,23 +5,46 @@ import datetime
 
 
 def _most_recent_trading_day() -> datetime.date:
-    """Return the most recent weekday whose session has fully closed.
+    """Return the most recent date with actual SPX 5-min data <= today.
 
-    If today is a weekday but the market hasn't closed yet (before 4 PM ET),
-    we step back to the previous trading day so the explorer doesn't open on
-    a date with no data.
+    Checks the CSV archive first, then falls back to a Schwab API probe for
+    today if the CSV doesn't reach today (e.g. data hasn't been archived yet).
+    Final fallback is weekday math for when neither source is available.
     """
-    import pytz
-    now_et = datetime.datetime.now(pytz.timezone("America/New_York"))
-    d = now_et.date()
-    # Walk back past weekends
+    today = datetime.date.today()
+
+    # 1. Try CSV: find the latest date with data that is <= today
+    if os.path.exists(_FRD_5MIN_PATH):
+        try:
+            df = pd.read_csv(_FRD_5MIN_PATH, usecols=["timestamp"], parse_dates=["timestamp"])
+            dates = df["timestamp"].dt.date
+            candidates = [d for d in dates.unique() if d <= today]
+            if candidates:
+                latest_csv = max(candidates)
+                # If CSV already has today, return today
+                if latest_csv == today:
+                    return today
+                # CSV doesn't have today — probe Schwab to see if today has data
+                start_dt = datetime.datetime.combine(today, datetime.time(0, 0))
+                end_dt   = datetime.datetime.combine(today, datetime.time(23, 59, 59))
+                try:
+                    raw = schwab_client.fetch_price_history(
+                        symbol="$SPX", period_type="day", freq_type="minute", freq=5,
+                        start_date=int(start_dt.timestamp() * 1000),
+                        end_date=int(end_dt.timestamp() * 1000),
+                    )
+                    if raw and raw.get("candles"):
+                        return today
+                except Exception:
+                    pass
+                return latest_csv
+        except Exception:
+            pass
+
+    # 2. Fallback: most recent weekday
+    d = today
     while d.weekday() >= 5:
         d -= datetime.timedelta(days=1)
-    # If today is a weekday but before market close, use the previous trading day
-    if d == now_et.date() and now_et.time() < datetime.time(16, 0):
-        d -= datetime.timedelta(days=1)
-        while d.weekday() >= 5:
-            d -= datetime.timedelta(days=1)
     return d
 import html
 import json
