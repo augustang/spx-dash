@@ -4,7 +4,29 @@
 {% block content %}
 <div>
 
-  <!-- 1. Long-term chart -->
+  <!-- 1. Conditional comparison -->
+  <div class="section-label">Conditional comparison</div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div id="cc-section"
+           hx-get="/api/study/cc"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="loading-placeholder" style="height:100px">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Intraday explorer -->
+  <div class="section-label">Intraday explorer</div>
+  <div id="intraday-content" class="mb-4"
+       hx-get="/api/study/intraday?date={{ yesterday }}"
+       hx-trigger="load delay:200ms"
+       hx-swap="innerHTML">
+    <div class="loading-placeholder" style="height:300px">Loading…</div>
+  </div>
+
+  <!-- 3. Long-term chart -->
   <div class="section-label">Long-term chart</div>
   <div class="card mb-4">
     <div class="card-body">
@@ -46,32 +68,9 @@
       </div>
       <div id="long-chart-container"
            hx-get="/api/study/long-chart?range=1Y"
-           hx-trigger="load"
+           hx-trigger="load delay:400ms"
            hx-swap="innerHTML">
         <div class="loading-placeholder" style="height:500px">Loading…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 2. Intraday explorer -->
-  <div class="section-label">Intraday explorer</div>
-  <div id="intraday-content" class="mb-4"
-       hx-get="/api/study/intraday?date={{ yesterday }}"
-       hx-trigger="load"
-       hx-swap="innerHTML">
-    <div class="loading-placeholder" style="height:300px">Loading…</div>
-  </div>
-
-  <!-- 3. Conditional comparison -->
-  <!-- load delayed so long-chart + intraday (above fold) get first priority -->
-  <div class="section-label">Conditional comparison</div>
-  <div class="card mb-4">
-    <div class="card-body">
-      <div id="cc-section"
-           hx-get="/api/study/cc"
-           hx-trigger="load delay:300ms"
-           hx-swap="innerHTML">
-        <div class="loading-placeholder" style="height:100px">Loading…</div>
       </div>
     </div>
   </div>
