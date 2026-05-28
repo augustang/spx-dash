@@ -266,13 +266,8 @@ def _get_event_daily_df() -> pd.DataFrame:
     return pd.DataFrame()
 
 
-@cache.memoize(timeout=0)
-def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
-    frd = _load_frd_5min()
-    if not frd.empty:
-        day_df = frd[frd.index.date == d]
-        if not day_df.empty:
-            return day_df[["Open", "High", "Low", "Close"]]
+def _fetch_5min_from_schwab(d: datetime.date) -> pd.DataFrame:
+    """Fetch 5-min bars for date d from the Schwab API. Returns empty DF on failure."""
     start_dt = datetime.datetime.combine(d, datetime.time(0, 0))
     end_dt   = datetime.datetime.combine(d, datetime.time(23, 59, 59))
     raw = schwab_client.fetch_price_history(
@@ -296,6 +291,18 @@ def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
                 _append_to_archive(df)
                 return df
     return pd.DataFrame()
+
+
+@cache.memoize(timeout=0)
+def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
+    """Load 5-min bars for a historical date. CSV-first, Schwab fallback.
+    Not used for today — callers should use _fetch_5min_from_schwab directly."""
+    frd = _load_frd_5min()
+    if not frd.empty:
+        day_df = frd[frd.index.date == d]
+        if not day_df.empty:
+            return day_df[["Open", "High", "Low", "Close"]]
+    return _fetch_5min_from_schwab(d)
 
 
 @cache.memoize(timeout=120)
@@ -518,7 +525,16 @@ def api_intraday():
     if not date_str:
         return ''
     selected_date = datetime.date.fromisoformat(date_str)
-    df_day = get_spx_5min_for_date(selected_date)
+    # Today: always fetch from Schwab so live data is current, not stale CSV bars.
+    # Historical: use the memoized CSV-backed path.
+    if selected_date == datetime.date.today():
+        df_day = _fetch_5min_from_schwab(selected_date)
+        if df_day.empty:
+            frd = _load_frd_5min()
+            if not frd.empty:
+                df_day = frd[frd.index.date == selected_date][["Open", "High", "Low", "Close"]]
+    else:
+        df_day = get_spx_5min_for_date(selected_date)
     today_iso    = datetime.date.today().isoformat()
     min_date_iso = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
     if df_day.empty:
