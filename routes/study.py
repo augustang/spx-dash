@@ -95,6 +95,9 @@ _CMP_OFFSET_OPTS = ["-3 days", "-2 days", "-1 day", "Day of", "+1 day", "+2 days
 _CMP_OFFSET_VALS = {"-3 days": -3, "-2 days": -2, "-1 day": -1, "Day of": 0, "+1 day": 1, "+2 days": 2}
 _CMP_RANGE_OPTS  = ["3M", "6M", "1Y", "2Y", "All"]
 _CMP_RANGE_DAYS  = {"3M": 91, "6M": 182, "1Y": 365, "2Y": 730, "All": None}
+
+_CC_AUTO_RANGE_OPTS = ["1Y", "2Y", "3Y", "5Y", "8Y", "All"]
+_CC_AUTO_RANGE_DAYS = {"1Y": 365, "2Y": 730, "3Y": 1095, "5Y": 1826, "8Y": 2922, "All": None}
 _CMP_GAP_OPTS    = ["All", "Gap up ↑", "Gap down ↓"]
 
 _NOTABLE_EVENTS: list[tuple[datetime.date, str]] = [
@@ -1003,7 +1006,7 @@ def _render_cc_auto(store):
         n_badge_html, results_html = _build_cc_auto_results_html(store, snap)
     return render_template('partials/cc_auto_section.html',
         store=store,
-        range_opts=_CMP_RANGE_OPTS,
+        range_opts=_CC_AUTO_RANGE_OPTS,
         gap_opts=_CMP_GAP_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
@@ -1195,7 +1198,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     n_checkpoints = len(checkpoints)
     scores = _score_days_against_checkpoints(snap, checkpoints, tolerance)
 
-    rng_days = _CMP_RANGE_DAYS.get(store.get("range", "All"))
+    rng_days = _CC_AUTO_RANGE_DAYS.get(store.get("range", "All"))
     if rng_days:
         cutoff = datetime.date.today() - datetime.timedelta(days=rng_days)
         scores = scores[scores.index >= cutoff]
