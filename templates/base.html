@@ -406,14 +406,19 @@ function _renderPlotlyEl(el) {
     var plotFn = isUpdate ? Plotly.react : Plotly.newPlot;
     var fig = JSON.parse(el.dataset.plotly);
     fig.layout.autosize = true;
-    plotFn(el, fig.data, fig.layout, { displayModeBar: false });
-    _plotCache[el.id] = el;
-    positionStrikePills(el);
-    positionEventLabels(el);
-    if (!isUpdate) {
-      el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
-      el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
-    }
+    plotFn(el, fig.data, fig.layout, { displayModeBar: false }).then(function() {
+      // After Plotly.react the element may have moved to a new DOM parent via
+      // replaceChild. Force a resize so Plotly recalculates container geometry
+      // and reinitialises its hover layer with correct coordinates.
+      if (isUpdate && Plotly.Plots) Plotly.Plots.resize(el);
+      _plotCache[el.id] = el;
+      positionStrikePills(el);
+      positionEventLabels(el);
+      if (!isUpdate) {
+        el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
+        el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
+      }
+    });
   } catch (err) {
     console.error('Plotly render failed', err, el);
   }
