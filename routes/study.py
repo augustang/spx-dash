@@ -566,6 +566,12 @@ def api_intraday():
         df_day['Close'], df_day.index, line_color, halo_color,
         chart_height=420, hover_xfmt="%H:%M",
     )
+    # Always show the full trading session window so the chart looks consistent
+    # regardless of how many bars are available (e.g. today's live partial data).
+    fig.update_layout(xaxis_range=[
+        datetime.datetime.combine(selected_date, datetime.time(9, 30)),
+        datetime.datetime.combine(selected_date, datetime.time(16, 15)),
+    ])
 
     today_iso    = datetime.date.today().isoformat()
     min_date_iso = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
