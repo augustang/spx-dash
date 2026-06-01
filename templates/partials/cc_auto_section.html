@@ -125,6 +125,25 @@
           </label>
         </div>
       </div>
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">Include events</p>
+        <div class="pill-group">
+          {% set incl = store.get('include_events', []) %}
+          {% for ev in ["All", "FOMC", "OPEX", "VIX Exp"] %}
+          <label class="pill-label {% if ev in incl %}active{% endif %}">
+            <input type="checkbox"
+                   {% if ev in incl %}checked{% endif %}
+                   hx-post="/api/study/cc/auto"
+                   hx-vals='{"action":"include_event","event":"{{ ev }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-auto-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            {{ ev }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
 

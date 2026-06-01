@@ -156,8 +156,10 @@ def _get_cc_store() -> dict:
     store.setdefault("auto_mode",        True)
     store.setdefault("tolerance",        0.20)
     store.setdefault("match_threshold",  0.75)
-    store.setdefault("show_historical",    False)
+    store.setdefault("show_historical",    True)
     store.setdefault("line_color_filter",  "all")
+    store.setdefault("include_events",     [])
+    store.setdefault("range",              "8Y")
     return store
 
 
@@ -1062,6 +1064,22 @@ def api_cc_auto():
                 store["line_color_filter"] = request.form.get("line_color_filter", "all")
                 if store["line_color_filter"] != "all":
                     store["show_historical"] = True
+        elif action == 'include_event':
+            ev = request.form.get('event')
+            if ev:
+                incl = list(store.get("include_events", []))
+                if ev == "All":
+                    # Toggle All: if already active, clear; otherwise select All only
+                    store["include_events"] = [] if "All" in incl else ["All"]
+                else:
+                    # Toggle individual: deactivate All, toggle the specific event
+                    if "All" in incl:
+                        incl.remove("All")
+                    if ev in incl:
+                        incl.remove(ev)
+                    else:
+                        incl.append(ev)
+                    store["include_events"] = incl
         _save_cc_store(store)
     return _render_cc_auto(store)
 
@@ -1198,7 +1216,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     n_checkpoints = len(checkpoints)
     scores = _score_days_against_checkpoints(snap, checkpoints, tolerance)
 
-    rng_days = _CC_AUTO_RANGE_DAYS.get(store.get("range", "All"))
+    rng_days = _CC_AUTO_RANGE_DAYS.get(store.get("range", "8Y"))
     if rng_days:
         cutoff = datetime.date.today() - datetime.timedelta(days=rng_days)
         scores = scores[scores.index >= cutoff]
@@ -1210,6 +1228,15 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             scores = scores[gap_s > 0]
         elif gap_filter == "Gap down ↓":
             scores = scores[gap_s < 0]
+
+    # Exclude event days not in the include list (whitelist approach)
+    _event_col_map = {"FOMC": "days_from_fomc", "OPEX": "days_from_opex", "VIX Exp": "days_from_vix_exp"}
+    include_events = store.get("include_events", [])
+    if "All" not in include_events:
+        for ev, col in _event_col_map.items():
+            if ev not in include_events and col in snap.columns:
+                on_event = snap[col].reindex(scores.index).fillna(1) == 0
+                scores = scores[~on_event]
 
     # Exclude today itself from historical matches
     scores = scores[scores.index != datetime.date.today()]

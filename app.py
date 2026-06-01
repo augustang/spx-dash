@@ -70,6 +70,8 @@ _DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
 @app.before_request
 def require_auth():
+    if os.environ.get("LOCAL_DEV"):
+        return
     if request.path.startswith('/static') or request.path == '/login':
         return
     if not session.get('auth'):
