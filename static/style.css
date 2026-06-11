@@ -81,7 +81,7 @@ main {
 .row-3col        { display: grid; grid-template-columns: 1fr 1fr 1fr;     gap: 16px; }
 .row-4col        { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
 .row-2col-study  { display: grid; grid-template-columns: 5fr 7fr;         gap: 24px; }
-.row-intraday    { display: grid; grid-template-columns: 1fr 2fr;         gap: 24px; }
+.row-intraday    { display: grid; grid-template-columns: 5fr 7fr;         gap: 24px; }
 
 
 @media (min-width: 1386px) {
@@ -412,6 +412,65 @@ select.figma-dropdown {
         gap: 8px;
     }
 }
+
+/* Day match megachart: overlay + EOD histogram (Study → auto mode) */
+.cc-megachart-row {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    margin-top: 24px;
+    align-items: stretch;
+}
+.cc-megachart-overlay {
+    flex: 4 1 0%;
+    min-width: 0;
+}
+
+/* Stack overlay line chart + session-low bar chart (same width as overlay column) */
+.cc-overlay-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 0;
+}
+
+/* Session low chart: 97% width of overlay column, left-aligned (no gap on left) */
+.cc-lowtime-chart-wrap {
+    width: 97%;
+    max-width: 97%;
+    align-self: flex-start;
+    box-sizing: border-box;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.cc-lowtime-chart-wrap .chart-pill-wrap {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.cc-megachart-hist {
+    flex: 0.5 1 0%;
+    min-width: 0;
+    margin-left: -4px;
+}
+@media (max-width: 768px) {
+    .cc-megachart-row {
+        gap: 6px;
+    }
+    .cc-megachart-overlay,
+    .cc-megachart-hist {
+        flex: 1 1 50%;
+        min-width: 0;
+    }
+    .cc-megachart-hist {
+        margin-left: 0;
+    }
+}
+
 /* ── Spreads grid (Figma-styled) ──────────────────────────────────────────── */
 .spreads-scroll {
     max-height: 350px;

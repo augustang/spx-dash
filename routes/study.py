@@ -49,6 +49,7 @@ def _most_recent_trading_day() -> datetime.date:
 import html
 import json
 import os
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -80,6 +81,10 @@ except (FileNotFoundError, json.JSONDecodeError):
     _INTRADAY_NOTES = {}
 
 _CC_SNAP_TIMES = [(h, m) for h in range(9, 16) for m in (0, 30) if (h, m) >= (9, 30) and (h, m) <= (15, 30)]
+# Half-hour checkpoint grid + 16:00 for snapping session-low timestamps (auto CC low-time chart).
+_CC_LOWTIME_ANCHOR_TIMES: tuple[datetime.time, ...] = tuple(
+    datetime.time(h, m) for h, m in list(_CC_SNAP_TIMES) + [(16, 0)]
+)
 _CC_TIME_OPTS  = [f"{h}:{m:02d}" for h, m in _CC_SNAP_TIMES]
 _CC_COND_TYPES = ["% change at time", "Days from event", "Day of week", "Month", "Overnight gap"]
 _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
@@ -181,8 +186,11 @@ def _load_frd_5min() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_csv(_FRD_5MIN_PATH, parse_dates=["timestamp"])
     df.set_index("timestamp", inplace=True)
+    df = df[df.index.notna()]
     df.rename(columns={"open": "Open", "high": "High", "low": "Low", "close": "Close"}, inplace=True)
     df.index = df.index.tz_localize(None)
+    if not df.index.is_monotonic_increasing:
+        df = df.sort_index()
     return df
 
 
@@ -298,10 +306,13 @@ def _fetch_5min_from_schwab(d: datetime.date) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-@cache.memoize(timeout=0)
 def get_spx_5min_for_date(d: datetime.date) -> pd.DataFrame:
     """Load 5-min bars for a historical date. CSV-first, Schwab fallback.
-    Not used for today — callers should use _fetch_5min_from_schwab directly."""
+
+    Not memoized per date: the CSV grows during/after a session, and a stale
+    cache would keep partial-day slices (e.g. only bars through ~10:45).
+    `_load_frd_5min` remains memoized and is invalidated when the archive updates.
+    """
     frd = _load_frd_5min()
     if not frd.empty:
         day_df = frd[frd.index.date == d]
@@ -447,6 +458,21 @@ def _build_header_ctx():
 
 
 # ── Chart helper ─────────────────────────────────────────────────────────────
+
+
+def _minutes_of_day(t: datetime.time) -> float:
+    return t.hour * 60 + t.minute + t.second / 60.0 + t.microsecond / 60_000_000.0
+
+
+def _snap_time_to_nearest_anchor(t: datetime.time, anchors: tuple[datetime.time, ...]) -> datetime.time:
+    """Pick anchor minimizing clock distance; ties break to earlier time."""
+    tm = _minutes_of_day(t)
+
+    def sort_key(a: datetime.time) -> tuple[float, datetime.time]:
+        return (abs(tm - _minutes_of_day(a)), a)
+
+    return min(anchors, key=sort_key)
+
 
 def _chart_html(div_id: str, fig: go.Figure, evt_payload=None) -> str:
     fig_json = html.escape(fig.to_json(), quote=True)
@@ -1280,19 +1306,18 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             pass
 
 
-    # ── Stat pills ────────────────────────────────────────────────────────
+    # ── Stat pills (assembled after megachart block so “Today” can sit right) ─
     eod = matched["eod_chg_pct"].dropna() if "eod_chg_pct" in matched.columns else pd.Series(dtype=float)
-    pills_html = ""
-    if not eod.empty:
-        pills_html = _stat_pills_html(eod.mean(), eod.median(),
-                                      (eod >= 0).mean() * 100, eod.std(), margin_top=24)
 
     # ── Megachart: two separate figures in a flex row ────────────────────
     # Two independent go.Figure objects share the same y-axis range so the
     # 0% gridline aligns perfectly, while each has its own isolated hover area.
     megachart_html = ""
+    today_pills_right = ""
+    session_low_caption = ""
     frd5 = _load_frd_5min()
     if not frd5.empty:
+        low_time_counts: Counter = Counter()
         ofig = go.Figure()
         all_oy: list[list[float]] = []
 
@@ -1308,6 +1333,9 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             odf = odf[odf.index.time <= datetime.time(16, 4)]
             if odf.empty:
                 continue
+            low_time_counts[_snap_time_to_nearest_anchor(
+                odf["Low"].idxmin().time(), _CC_LOWTIME_ANCHOR_TIMES
+            )] += 1
             ox   = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
             base = float(matched.loc[od, "prev_close"]) if "prev_close" in matched.columns and not pd.isna(matched.loc[od, "prev_close"]) else float(odf["Open"].iloc[0])
             if base == 0:
@@ -1434,6 +1462,89 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             overlay_layout["yaxis2"] = overlay_yaxis2_kw
         ofig.update_layout(**overlay_layout)
 
+        # ── Session-low time of day (matched days, nearest half-hour) ─────
+        lowtime_chart_html = ""
+        if low_time_counts.total() > 0:
+            xs_ord: list[datetime.datetime] = []
+            ys_ord: list[int] = []
+            slot_labels: list[str] = []
+            _slot_ms = 30 * 60 * 1000
+            width_ms = int(_slot_ms * 0.38)
+            half_w = datetime.timedelta(milliseconds=width_ms // 2)
+            for at in _CC_LOWTIME_ANCHOR_TIMES:
+                c = int(low_time_counts[at])
+                if c > 0:
+                    slot_start = datetime.datetime.combine(_ref, at)
+                    # Plotly centers bars on x; offset so the bar is left-aligned to the anchor.
+                    xs_ord.append(slot_start + half_w)
+                    ys_ord.append(c)
+                    slot_labels.append(at.strftime("%H:%M"))
+            if xs_ord:
+                y_max_data = max(ys_ord)
+                pad = max(1, int(np.ceil(y_max_data * 0.06)))
+                y_ceil = y_max_data + pad
+                lowfig = go.Figure()
+                lowfig.add_trace(go.Bar(
+                    x=xs_ord,
+                    y=ys_ord,
+                    width=width_ms,
+                    customdata=slot_labels,
+                    marker_color="#FF3D54",
+                    marker_line_width=0,
+                    showlegend=False,
+                    hoverlabel=dict(bgcolor="#FF3D54", font=dict(color="white")),
+                    hovertemplate="%{customdata} · %{y} days<extra></extra>",
+                ))
+                lowfig.update_layout(
+                    font=dict(family="Inter, sans-serif"),
+                    height=220,
+                    # Small margins so reversed-y “0” (top) and tick labels aren’t clipped at t=l=0.
+                    margin=dict(l=8, r=4, t=14, b=6),
+                    plot_bgcolor="white", paper_bgcolor="white",
+                    hovermode="closest",
+                    showlegend=False,
+                    hoverlabel=dict(
+                        bordercolor="rgba(0,0,0,0)",
+                        bgcolor="#FF3D54",
+                        font=dict(family="Inter, sans-serif", size=12, color="white"),
+                    ),
+                    xaxis=dict(
+                        showgrid=False,
+                        showticklabels=False,
+                        tickformat="%H:%M",
+                        tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                        ticks="",
+                        ticklen=0,
+                        tickcolor="rgba(0,0,0,0)",
+                        type="date",
+                        range=[
+                            datetime.datetime.combine(_ref, datetime.time(9, 30))
+                            - datetime.timedelta(minutes=7),
+                            datetime.datetime.combine(_ref, datetime.time(16, 15)),
+                        ],
+                        rangeslider=dict(visible=False),
+                    ),
+                    yaxis=dict(
+                        range=[y_ceil, 0],
+                        automargin=True,
+                        tickformat="d",
+                        showgrid=False,
+                        tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+                        dtick=1 if y_max_data <= 12 else None,
+                    ),
+                )
+                lowtime_chart_html = (
+                    '<div class="cc-lowtime-chart-wrap">'
+                    + _chart_html("cc-lowtime-chart", lowfig)
+                    + "</div>"
+                )
+                session_low_caption = (
+                    '<div style="margin-top:12px;margin-bottom:0">'
+                    '<span style="font-size:11px;color:#888;font-family:Inter, sans-serif">'
+                    "Session low time (rounded to nearest half hour)"
+                    "</span></div>"
+                )
+
         # ── Histogram figure ──────────────────────────────────────────────
         histfig = go.Figure()
         if not eod.empty and pct_min is not None:
@@ -1444,20 +1555,49 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             mask        = counts > 0
             counts      = counts[mask]
             bin_centers = bin_centers[mask]
-            bar_colors  = [GREEN_400 if c >= 0 else "#FF3D54" for c in bin_centers]
             max_count   = int(counts.max()) if counts.size else 1
-            hover_text  = [f"{round(float(bc), 2):+.2f}%: {int(c)} days"
-                           for bc, c in zip(bin_centers, counts)]
-            histfig.add_trace(go.Bar(
-                x=list(counts), y=bin_centers,
-                orientation="h",
-                marker_color=bar_colors,
-                marker_line_width=0,
-                width=bsz * 0.85,
-                showlegend=False,
-                hovertext=hover_text,
-                hovertemplate="%{hovertext}<extra></extra>",
-            ))
+            bar_w = bsz * 0.85
+            gcx: list[float] = []
+            gcy: list[float] = []
+            rcx: list[float] = []
+            rcy: list[float] = []
+            for bc, c in zip(bin_centers, counts):
+                fv = float(bc)
+                iv = int(c)
+                if fv >= 0:
+                    gcx.append(iv)
+                    gcy.append(fv)
+                else:
+                    rcx.append(iv)
+                    rcy.append(fv)
+            if gcx:
+                g_hover_pct = [f"{round(float(v), 2):+.2f}%" for v in gcy]
+                histfig.add_trace(go.Bar(
+                    x=gcx,
+                    y=gcy,
+                    orientation="h",
+                    customdata=g_hover_pct,
+                    marker_color=GREEN_400,
+                    marker_line_width=0,
+                    width=bar_w,
+                    showlegend=False,
+                    hoverlabel=dict(bgcolor=GREEN_400, font=dict(color="#1E1E1E")),
+                    hovertemplate="%{customdata} · %{x} days<extra></extra>",
+                ))
+            if rcx:
+                r_hover_pct = [f"{round(float(v), 2):+.2f}%" for v in rcy]
+                histfig.add_trace(go.Bar(
+                    x=rcx,
+                    y=rcy,
+                    orientation="h",
+                    customdata=r_hover_pct,
+                    marker_color="#FF3D54",
+                    marker_line_width=0,
+                    width=bar_w,
+                    showlegend=False,
+                    hoverlabel=dict(bgcolor="#FF3D54", font=dict(color="white")),
+                    hovertemplate="%{customdata} · %{x} days<extra></extra>",
+                ))
             histfig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
             histfig.update_layout(
                 font=dict(family="Inter, sans-serif"),
@@ -1466,7 +1606,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 hovermode="closest",
                 showlegend=False,
                 hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
-                                font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
+                                font=dict(family="Inter, sans-serif", size=12)),
                 xaxis=dict(
                     range=[0, max_count * 1.3],
                     autorange="reversed",
@@ -1482,23 +1622,42 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 ),
             )
 
-        today_legend = (
-            '<div style="display:flex;align-items:center;gap:6px;margin-top:12px;margin-bottom:0">'
-            '<span style="display:inline-block;width:20px;height:1.5px;background:#4B7BFF;border-radius:1px;"></span>'
-            '<span style="font-size:11px;color:#555;">Today</span>'
-            '</div>'
-        ) if (not today_df.empty and today_prev_close) else ''
+        if not today_df.empty and today_prev_close:
+            today_pills_right = (
+                '<div style="display:flex;align-items:center;gap:6px;">'
+                '<span style="display:inline-block;width:20px;height:1.5px;'
+                'background:#4B7BFF;border-radius:1px;"></span>'
+                '<span style="font-size:11px;color:#555;">Today</span>'
+                "</div>"
+            )
 
         overlay_chart = _chart_html('cc-overlay-chart', ofig)
         hist_chart    = _chart_html('cc-hist-chart', histfig) if len(histfig.data) > 0 else ''
-        megachart_html = (
-            f'<div style="display:flex;gap:0;width:100%;margin-top:24px">'
-            + f'<div style="flex:4;min-width:0">{overlay_chart}</div>'
-            + f'<div style="flex:0.5;min-width:0;margin-left:-4px">{hist_chart}</div>'
+        overlay_stack = (
+            '<div class="cc-overlay-stack">'
+            + overlay_chart
+            + lowtime_chart_html
             + '</div>'
-            + today_legend
+        )
+        megachart_html = (
+            '<div class="cc-megachart-row">'
+            + f'<div class="cc-megachart-overlay">{overlay_stack}</div>'
+            + f'<div class="cc-megachart-hist">{hist_chart}</div>'
+            + '</div>'
+            + session_low_caption
             + f'<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
             f'{n} days matching ≥ {int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
+        )
+
+    pills_html = ""
+    if not eod.empty:
+        pills_html = _stat_pills_html(
+            eod.mean(),
+            eod.median(),
+            (eod >= 0).mean() * 100,
+            eod.std(),
+            margin_top=24,
+            right_html=today_pills_right,
         )
 
     return n_badge_html, pills_html + megachart_html
@@ -1786,21 +1945,31 @@ def _build_histogram_figure(eod_series: pd.Series, x_label: str = "EOD % from op
     return fig
 
 
-def _stat_pills_html(mean, med, ppos, std, margin_top=24) -> str:
+def _stat_pills_html(mean, med, ppos, std, margin_top=24, right_html="") -> str:
     def _pill(label, val, color="#444"):
         return (f'<span style="font-size:12px;color:#555;margin-right:16px;">'
                 f'{label}: <b style="color:{color};">{val}</b></span>')
     mc = GREEN_600 if mean >= 0 else "#FF3D54"
     dc = GREEN_600 if med  >= 0 else "#FF3D54"
     pc = GREEN_600 if ppos >= 50 else "#FF3D54"
-    return (
-        '<div style="margin-top:{margin_top}px;margin-bottom:12px;">'.format(margin_top=margin_top)
-        + _pill("Mean EOD",   f'{"+" if mean >= 0 else ""}{mean:.2f}%', mc)
+    inner = (
+        _pill("Mean EOD",   f'{"+" if mean >= 0 else ""}{mean:.2f}%', mc)
         + _pill("Median EOD", f'{"+" if med  >= 0 else ""}{med:.2f}%',  dc)
         + _pill("% Positive", f'{ppos:.0f}%',                           pc)
         + _pill("Std Dev",    f'{std:.2f}%')
-        + '</div>'
     )
+    row_style = (
+        "display:flex;justify-content:space-between;align-items:center;"
+        "flex-wrap:wrap;gap:12px;margin-top:{mt}px;margin-bottom:12px;"
+    ).format(mt=margin_top)
+    if right_html:
+        return (
+            f'<div style="{row_style}">'
+            f'<div style="display:flex;flex-wrap:wrap;align-items:center;">{inner}</div>'
+            f'<div style="flex-shrink:0;margin-left:auto">{right_html}</div>'
+            "</div>"
+        )
+    return f'<div style="margin-top:{margin_top}px;margin-bottom:12px;">{inner}</div>'
 
 
 def _compute_event_impact(daily_df, events):
