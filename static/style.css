@@ -88,6 +88,11 @@ main {
     .col-right { display: flex; flex-direction: column; }
     .col-right > .section-label { align-self: flex-start; }
     .chart-col-spacer { flex: 1; }
+    /* Keep metrics / intraday stats column from shrinking below measured ideal width */
+    .page-grid,
+    .row-intraday {
+        grid-template-columns: minmax(538px, 5fr) 7fr;
+    }
 }
 
 @media (max-width: 1385px) {
