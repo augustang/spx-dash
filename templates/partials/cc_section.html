@@ -72,9 +72,9 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
         {% for opt in gap_opts %}
-        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
+        <label class="pill-label {% if opt == (store.gap_auto or 'All') %}active{% endif %}">
           <input type="radio" name="cc_gap_a" value="{{ opt }}"
-                 {% if opt == (store.gap or 'All') %}checked{% endif %}
+                 {% if opt == (store.gap_auto or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc"
                  hx-vals='{"action":"filter","gap":"{{ opt }}"}'
                  hx-trigger="change"
@@ -91,9 +91,9 @@
         <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
         <div class="pill-group">
           {% for opt in range_opts %}
-          <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
+          <label class="pill-label {% if opt == (store.range_auto or '8Y') %}active{% endif %}">
             <input type="radio" name="cc_range_a" value="{{ opt }}"
-                   {% if opt == (store.range or 'All') %}checked{% endif %}
+                   {% if opt == (store.range_auto or '8Y') %}checked{% endif %}
                    hx-post="/api/study/cc"
                    hx-vals='{"action":"filter","range":"{{ opt }}"}'
                    hx-trigger="change"
@@ -108,8 +108,8 @@
       <div>
         <p style="font-size:11px;color:#999;margin-bottom:8px">View</p>
         <div class="pill-group">
-          {% set sh = store.get('show_historical', False) %}
-          {% set lcf = store.get('line_color_filter', 'all') %}
+          {% set sh = store.get('show_historical_auto', False) %}
+          {% set lcf = store.get('line_color_filter_auto', 'all') %}
           <label class="pill-label {% if sh %}active{% endif %}">
             <input type="checkbox"
                    {% if sh %}checked{% endif %}
@@ -422,9 +422,9 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
         {% for opt in gap_opts %}
-        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
+        <label class="pill-label {% if opt == (store.gap_manual or 'All') %}active{% endif %}">
           <input type="radio" name="cc_gap" value="{{ opt }}"
-                 {% if opt == (store.gap or 'All') %}checked{% endif %}
+                 {% if opt == (store.gap_manual or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc"
                  hx-vals='{"action":"filter","gap":"{{ opt }}"}'
                  hx-trigger="change"
@@ -440,9 +440,9 @@
       <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
       <div class="pill-group">
         {% for opt in range_opts %}
-        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
+        <label class="pill-label {% if opt == (store.range_manual or 'All') %}active{% endif %}">
           <input type="radio" name="cc_range" value="{{ opt }}"
-                 {% if opt == (store.range or 'All') %}checked{% endif %}
+                 {% if opt == (store.range_manual or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc"
                  hx-vals='{"action":"filter","range":"{{ opt }}"}'
                  hx-trigger="change"

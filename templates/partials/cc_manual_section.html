@@ -268,17 +268,17 @@
   </div>
   {% endfor %}
 
-  <!-- Filters (only shown when conditions exist) -->
+  <!-- Filters (same layout as historical overlay; only when conditions exist) -->
   {% if store.ids %}
-  <hr style="border:none;border-top:1px solid #EBEBEB;margin:16px 0 6px" />
-  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:16px">
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:24px 0 12px" />
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:4px">
     <div>
       <p style="font-size:11px;color:#999;margin-bottom:8px">Overnight gap</p>
       <div class="pill-group">
         {% for opt in gap_opts %}
-        <label class="pill-label {% if opt == (store.gap or 'All') %}active{% endif %}">
-          <input type="radio" name="cc_gap" value="{{ opt }}"
-                 {% if opt == (store.gap or 'All') %}checked{% endif %}
+        <label class="pill-label {% if opt == (store.gap_manual or 'All') %}active{% endif %}">
+          <input type="radio" name="cc_gap_m" value="{{ opt }}"
+                 {% if opt == (store.gap_manual or 'All') %}checked{% endif %}
                  hx-post="/api/study/cc/manual"
                  hx-vals='{"action":"filter","gap":"{{ opt }}"}'
                  hx-trigger="change"
@@ -290,22 +290,83 @@
         {% endfor %}
       </div>
     </div>
-    <div>
-      <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
-      <div class="pill-group">
-        {% for opt in range_opts %}
-        <label class="pill-label {% if opt == (store.range or 'All') %}active{% endif %}">
-          <input type="radio" name="cc_range" value="{{ opt }}"
-                 {% if opt == (store.range or 'All') %}checked{% endif %}
-                 hx-post="/api/study/cc/manual"
-                 hx-vals='{"action":"filter","range":"{{ opt }}"}'
-                 hx-trigger="change"
-                 hx-target="#cc-manual-section"
-                 hx-swap="innerHTML"
-                 style="display:none" />
-          {{ opt }}
-        </label>
-        {% endfor %}
+    <div style="display:flex;gap:24px;align-items:flex-end">
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">Time range</p>
+        <div class="pill-group">
+          {% for opt in range_opts %}
+          <label class="pill-label {% if opt == (store.range_manual or 'All') %}active{% endif %}">
+            <input type="radio" name="cc_range_m" value="{{ opt }}"
+                   {% if opt == (store.range_manual or 'All') %}checked{% endif %}
+                   hx-post="/api/study/cc/manual"
+                   hx-vals='{"action":"filter","range":"{{ opt }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-manual-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            {{ opt }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">View</p>
+        <div class="pill-group">
+          {% set sh = store.get('show_historical_manual', False) %}
+          {% set lcf = store.get('line_color_filter_manual', 'all') %}
+          <label class="pill-label {% if sh %}active{% endif %}">
+            <input type="checkbox"
+                   {% if sh %}checked{% endif %}
+                   hx-post="/api/study/cc/manual"
+                   hx-vals='{"action":"set_view","show_historical":"{{ "false" if sh else "true" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-manual-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Lines
+          </label>
+          <label class="pill-label {% if lcf == 'green' %}active{% endif %}">
+            <input type="checkbox"
+                   {% if lcf == 'green' %}checked{% endif %}
+                   hx-post="/api/study/cc/manual"
+                   hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "green" else "green" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-manual-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Green days
+          </label>
+          <label class="pill-label {% if lcf == 'red' %}active{% endif %}">
+            <input type="checkbox"
+                   {% if lcf == 'red' %}checked{% endif %}
+                   hx-post="/api/study/cc/manual"
+                   hx-vals='{"action":"set_view","line_color_filter":"{{ "all" if lcf == "red" else "red" }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-manual-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            Red days
+          </label>
+        </div>
+      </div>
+      <div>
+        <p style="font-size:11px;color:#999;margin-bottom:8px">Include events</p>
+        <div class="pill-group">
+          {% set incl = store.get('include_events_manual', []) %}
+          {% for ev in ["All", "FOMC", "OPEX", "VIX Exp"] %}
+          <label class="pill-label {% if ev in incl %}active{% endif %}">
+            <input type="checkbox"
+                   {% if ev in incl %}checked{% endif %}
+                   hx-post="/api/study/cc/manual"
+                   hx-vals='{"action":"include_event","event":"{{ ev }}"}'
+                   hx-trigger="change"
+                   hx-target="#cc-manual-section"
+                   hx-swap="innerHTML"
+                   style="display:none" />
+            {{ ev }}
+          </label>
+          {% endfor %}
+        </div>
       </div>
     </div>
   </div>
