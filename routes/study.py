@@ -1377,6 +1377,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     session_low_caption = ""
     frd5 = _load_frd_5min()
     if not frd5.empty:
+        frd1 = _load_frd_daily()
         low_time_counts: Counter = Counter()
         ofig = go.Figure()
         all_oy: list[list[float]] = []
@@ -1401,6 +1402,14 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             if base == 0:
                 continue
             oy  = ((odf["Close"] / base - 1) * 100).round(2).tolist()
+            _cc_set_overlay_terminal_from_daily(
+                ox, oy,
+                ref_date=_ref,
+                trade_date=pd.Timestamp(od).date(),
+                base=base,
+                frd1=frd1,
+                use_prev_close_norm=True,
+            )
             all_oy.append(oy)
             ev       = float(matched.loc[od, "eod_chg_pct"]) if "eod_chg_pct" in matched.columns else 0
             is_green = ev >= 0
@@ -1597,6 +1606,39 @@ def _apply_cc_conditions(snap, store):
             if "gap_pct" in snap.columns:
                 mask &= snap["gap_pct"].between(lo, hi)
     return snap[mask]
+
+
+def _cc_set_overlay_terminal_from_daily(
+    ox: list[datetime.datetime],
+    oy: list[float],
+    *,
+    ref_date: datetime.date,
+    trade_date: datetime.date,
+    base: float,
+    frd1: pd.DataFrame,
+    use_prev_close_norm: bool,
+) -> None:
+    """Replace the last intraday point with 16:00 using daily OHLC close (completed days only)."""
+    if not ox or not oy or frd1.empty or trade_date >= datetime.date.today():
+        return
+    dkey = pd.Timestamp(trade_date).normalize()
+    if dkey not in frd1.index:
+        return
+    row = frd1.loc[dkey]
+    c = float(row.get("Close", np.nan))
+    if np.isnan(c):
+        return
+    if use_prev_close_norm:
+        if base == 0 or np.isnan(base):
+            return
+        y_fin = (c / base - 1) * 100
+    else:
+        o_ = float(row.get("Open", np.nan))
+        if np.isnan(o_) or o_ == 0:
+            return
+        y_fin = (c / o_ - 1) * 100
+    ox[-1] = datetime.datetime.combine(ref_date, datetime.time(16, 0))
+    oy[-1] = round(float(y_fin), 2)
 
 
 def _cc_session_low_chart_bundle(low_time_counts: Counter, _ref: datetime.date) -> tuple[str, str]:
@@ -1854,6 +1896,7 @@ def _build_cc_results_html(store) -> tuple:
     use_prev_close = norm == "% from prior close"
 
     if not frd5.empty and ov_dates:
+        frd1 = _load_frd_daily()
         show_historical = store.get("show_historical_manual", True)
         line_color_filter = store.get("line_color_filter_manual", "all")
         low_time_counts: Counter = Counter()
@@ -1877,6 +1920,14 @@ def _build_cc_results_html(store) -> tuple:
             if base == 0:
                 continue
             oy = ((odf["Close"] / base - 1) * 100).round(2).tolist()
+            _cc_set_overlay_terminal_from_daily(
+                ox, oy,
+                ref_date=_ref,
+                trade_date=pd.Timestamp(od).date(),
+                base=base,
+                frd1=frd1,
+                use_prev_close_norm=use_prev_close,
+            )
             all_oy.append(oy)
             ev = float(matched.loc[od, eod_col]) if eod_col in matched.columns else float(matched.loc[od, "eod_pct"])
             is_green = ev >= 0
