@@ -2,9 +2,10 @@
 Schwab OAuth re-authorization script.
 
 Usage:
-    python3 schwab_auth.py                   # auto-capture on port 443 (needs sudo)
-    sudo python3 schwab_auth.py              # same, explicit sudo
-    python3 schwab_auth.py --manual          # skip local server, paste URL manually
+    python3 schwab_auth.py                   # default: paste redirect URL after login
+    python3 schwab_auth.py --manual        # same (explicit)
+    python3 schwab_auth.py --auto          # local HTTPS callback (port 443; use sudo)
+    sudo python3 schwab_auth.py --auto     # same with privileges for port 443
     python3 schwab_auth.py --url "https://127.0.0.1/?code=..."  # pass URL directly
 
 What it does:
@@ -158,7 +159,8 @@ def _exchange_code_for_tokens(code: str, app_key: str, app_secret: str, callback
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    manual_mode = "--manual" in sys.argv
+    # Default is manual paste; opt into local callback with --auto (often needs sudo on 443).
+    manual_mode = "--auto" not in sys.argv
 
     # --url "https://..." lets you pass the redirect URL directly as an arg
     direct_url = None
@@ -201,8 +203,8 @@ def main():
                     f"(port {cb_port} requires sudo)."
                 )
                 print(
-                    "   Tip: run 'sudo python3 schwab_auth.py' for full automation,\n"
-                    "   or use '--manual' to paste the URL yourself.\n"
+                    "   Tip: run 'sudo python3 schwab_auth.py --auto' to bind port 443,\n"
+                    "   or omit --auto and paste the redirect URL (default).\n"
                 )
                 manual_mode = True
 

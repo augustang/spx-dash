@@ -380,6 +380,13 @@ document.addEventListener('htmx:afterSwap', function(e) {
 // Named so the retry path can call it without capturing stale closures.
 function _renderPlotlyEl(el) {
   if (typeof Plotly === 'undefined') {
+    el._plotlyWaitCount = (el._plotlyWaitCount || 0) + 1;
+    if (el._plotlyWaitCount > 120) {
+      el.innerHTML = '<p style="padding:24px;font-size:13px;color:#888">'
+        + 'Chart library did not load (network or ad blocker). '
+        + 'Try refreshing, or allow cdn.plot.ly.</p>';
+      return;
+    }
     setTimeout(function() { _renderPlotlyEl(el); }, 50);
     return;
   }

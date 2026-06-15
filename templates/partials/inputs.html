@@ -27,7 +27,7 @@
       <label class="field-label">Spread width</label>
       <select name="sw" id="input-spread-width"
               class="figma-dropdown">
-        {% for w in [10, 25, 50, 100] %}
+        {% for w in [10, 15, 20, 25, 50, 100] %}
         <option value="{{ w }}" {% if w == saved_spread|int %}selected{% endif %}>{{ w }}</option>
         {% endfor %}
       </select>

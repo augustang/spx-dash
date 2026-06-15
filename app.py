@@ -30,7 +30,7 @@ if not os.path.exists(_token_path):
 else:
     print("✅ Schwab tokens file found on disk.")
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, make_response, redirect, render_template, request, session, url_for
 
 from shared.cache import cache
 from routes.trading import trading_bp
@@ -75,6 +75,12 @@ def require_auth():
     if request.path.startswith('/static') or request.path == '/login':
         return
     if not session.get('auth'):
+        # HTMX partials cannot follow a 302 like a full navigation; the swap never
+        # completes and panels stay on "Loading…". Force a full-page login instead.
+        if request.headers.get("HX-Request"):
+            r = make_response("", 401)
+            r.headers["HX-Redirect"] = url_for("login")
+            return r
         return redirect(url_for('login'))
 
 

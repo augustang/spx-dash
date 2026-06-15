@@ -1514,6 +1514,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             plot_bgcolor="white", paper_bgcolor="white",
             hovermode="closest", hoverdistance=-1,
             showlegend=False,
+            uirevision="cc-megachart-overlay",
             hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
                             font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
             xaxis=dict(
@@ -1759,6 +1760,7 @@ def _cc_megachart_hist_figure(eod: pd.Series, pct_min: float | None, pct_max: fl
             x=gcx,
             y=gcy,
             orientation="h",
+            name="eod_hist_nonneg",
             customdata=g_hover_pct,
             marker_color=GREEN_400,
             marker_line_width=0,
@@ -1773,6 +1775,7 @@ def _cc_megachart_hist_figure(eod: pd.Series, pct_min: float | None, pct_max: fl
             x=rcx,
             y=rcy,
             orientation="h",
+            name="eod_hist_neg",
             customdata=r_hover_pct,
             marker_color="#FF3D54",
             marker_line_width=0,
@@ -1787,7 +1790,11 @@ def _cc_megachart_hist_figure(eod: pd.Series, pct_min: float | None, pct_max: fl
         height=440, margin=dict(l=0, r=36, t=16, b=30),
         plot_bgcolor="white", paper_bgcolor="white",
         hovermode="closest",
+        hoverdistance=-1,
         showlegend=False,
+        # Stable across HTMX filter updates so Plotly.react keeps hover (same idea as
+        # uirevision on trading charts in shared/chart.create_spx_chart).
+        uirevision="cc-megachart-hist",
         hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
                         font=dict(family="Inter, sans-serif", size=12)),
         xaxis=dict(
@@ -2029,6 +2036,7 @@ def _build_cc_results_html(store) -> tuple:
             plot_bgcolor="white", paper_bgcolor="white",
             hovermode="closest", hoverdistance=-1,
             showlegend=False,
+            uirevision="cc-megachart-overlay",
             hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
                             font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
             xaxis=dict(

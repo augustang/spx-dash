@@ -9,7 +9,7 @@ import datetime
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
-from flask import Blueprint, render_template, request, session, jsonify, make_response
+from flask import Blueprint, render_template, request, session, jsonify, make_response, current_app
 
 import schwab_client
 from shared.cache import cache
@@ -424,80 +424,96 @@ def api_prob():
 
 @trading_bp.route('/api/trading/day-chart')
 def api_day_chart():
-    period_label = request.args.get('day_period', '1 Day')
-    day_map = {"1 Day": "1d", "3 Days": "3d", "5 Days": "5d"}
-    df = get_spx_history_intraday(period=day_map.get(period_label, "1d"))
-    spx_last, spx_open, _, _ = get_spx_metrics()
-    is_down = (spx_last - spx_open) < 0
-    color = "#FF3D54" if is_down else GREEN_400
-    halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
+    try:
+        period_label = request.args.get('day_period', '1 Day')
+        day_map = {"1 Day": "1d", "3 Days": "3d", "5 Days": "5d"}
+        df = get_spx_history_intraday(period=day_map.get(period_label, "1d"))
+        spx_last, spx_open, _, _ = get_spx_metrics()
+        is_down = (spx_last - spx_open) < 0
+        color = "#FF3D54" if is_down else GREEN_400
+        halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
 
-    store = _get_store()
-    selected_short = store.get("selected_short")
-    selected_long  = store.get("selected_long")
+        store = _get_store()
+        selected_short = store.get("selected_short")
+        selected_long  = store.get("selected_long")
 
-    if df.empty:
-        fig = empty_figure()
-    else:
-        fig = create_spx_chart(
-            period_label, df['Close'], df.index, color, halo,
-            selected_short=selected_short, selected_long=selected_long,
+        if df.empty:
+            fig = empty_figure()
+        else:
+            fig = create_spx_chart(
+                period_label, df['Close'], df.index, color, halo,
+                selected_short=selected_short, selected_long=selected_long,
+            )
+        return _chart_html('day-chart', fig, selected_short=selected_short, selected_long=selected_long)
+    except Exception:
+        current_app.logger.exception("api_day_chart failed")
+        return (
+            '<div class="chart-pill-wrap" style="position:relative;width:100%;height:420px;padding:16px">'
+            '<p style="font-size:13px;color:#888">Day chart unavailable. '
+            'Refresh the page or verify Schwab API tokens.</p></div>'
         )
-    return _chart_html('day-chart', fig, selected_short=selected_short, selected_long=selected_long)
 
 
 @trading_bp.route('/api/trading/month-chart')
 def api_month_chart():
-    period_label = request.args.get('month_period', '6 Months')
-    show_events  = bool(request.args.get('show_events'))
-    show_line    = bool(request.args.get('show_line'))
+    try:
+        period_label = request.args.get('month_period', '6 Months')
+        show_events  = bool(request.args.get('show_events'))
+        show_line    = bool(request.args.get('show_line'))
 
-    month_params = {"12 Months": "12mo", "8 Months": "8mo", "6 Months": "6mo",
-                    "3 Months": "3mo", "1 Month": "1mo"}
-    days_map = {"1mo": 30, "3mo": 90, "6mo": 180, "8mo": 240, "12mo": 365}
+        month_params = {"12 Months": "12mo", "8 Months": "8mo", "6 Months": "6mo",
+                        "3 Months": "3mo", "1 Month": "1mo"}
+        days_map = {"1mo": 30, "3mo": 90, "6mo": 180, "8mo": 240, "12mo": 365}
 
-    df = get_spx_history_historical()
-    spx_last, spx_open, _, _ = get_spx_metrics()
+        df = get_spx_history_historical()
+        spx_last, spx_open, _, _ = get_spx_metrics()
 
-    if df.empty:
-        return _chart_html('month-chart', empty_figure())
+        if df.empty:
+            return _chart_html('month-chart', empty_figure())
 
-    now_ts = pd.Timestamp.now('America/New_York').tz_localize(None).normalize()
-    if now_ts not in df.index:
-        live_row = pd.DataFrame(
-            {'Open': spx_last, 'High': spx_last, 'Low': spx_last, 'Close': spx_last},
-            index=[now_ts]
+        now_ts = pd.Timestamp.now('America/New_York').tz_localize(None).normalize()
+        if now_ts not in df.index:
+            live_row = pd.DataFrame(
+                {'Open': spx_last, 'High': spx_last, 'Low': spx_last, 'Close': spx_last},
+                index=[now_ts]
+            )
+            df = pd.concat([df, live_row])
+        else:
+            df.loc[now_ts, 'Close'] = spx_last
+
+        is_down = (spx_last - spx_open) < 0
+        color = "#FF3D54" if is_down else GREEN_400
+        halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
+
+        period    = month_params.get(period_label, "6mo")
+        view_days = days_map[period]
+        view_start = now_ts - pd.Timedelta(days=view_days)
+
+        events = None
+        if show_events:
+            lookahead = df.index.max() + pd.DateOffset(months=1)
+            events = get_financial_events(df.index.min(), lookahead)
+
+        candle_data = None if show_line else df
+
+        store = _get_store()
+        selected_short = store.get("selected_short")
+        selected_long  = store.get("selected_long")
+
+        fig = create_spx_chart(
+            period_label, df['Close'], df.index, color, halo,
+            events=events, chart_height=500, view_range=view_start,
+            ohlc_df=candle_data,
+            selected_short=selected_short, selected_long=selected_long,
         )
-        df = pd.concat([df, live_row])
-    else:
-        df.loc[now_ts, 'Close'] = spx_last
-
-    is_down = (spx_last - spx_open) < 0
-    color = "#FF3D54" if is_down else GREEN_400
-    halo  = 'rgba(255,61,84,0.3)' if is_down else 'rgba(17,241,133,0.3)'
-
-    period    = month_params.get(period_label, "6mo")
-    view_days = days_map[period]
-    view_start = now_ts - pd.Timedelta(days=view_days)
-
-    events = None
-    if show_events:
-        lookahead = df.index.max() + pd.DateOffset(months=1)
-        events = get_financial_events(df.index.min(), lookahead)
-
-    candle_data = None if show_line else df
-
-    store = _get_store()
-    selected_short = store.get("selected_short")
-    selected_long  = store.get("selected_long")
-
-    fig = create_spx_chart(
-        period_label, df['Close'], df.index, color, halo,
-        events=events, chart_height=500, view_range=view_start,
-        ohlc_df=candle_data,
-        selected_short=selected_short, selected_long=selected_long,
-    )
-    return _chart_html('month-chart', fig, selected_short=selected_short, selected_long=selected_long)
+        return _chart_html('month-chart', fig, selected_short=selected_short, selected_long=selected_long)
+    except Exception:
+        current_app.logger.exception("api_month_chart failed")
+        return (
+            '<div class="chart-pill-wrap" style="position:relative;width:100%;height:500px;padding:16px">'
+            '<p style="font-size:13px;color:#888">Long-term chart unavailable. '
+            'Refresh the page or verify Schwab API tokens.</p></div>'
+        )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
