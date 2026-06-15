@@ -377,7 +377,7 @@ var _plotCache = {};
 
 function _skipPlotlyDomCache(el) {
   if (!el || !el.id) return false;
-  return /^(cc-hist-chart|cc-overlay-chart|cc-lowtime-chart|study-long-chart|study-intraday-chart|cmp-histogram-chart|cmp-overlay-chart)$/.test(el.id);
+  return /^(cc-(auto|manual)-(hist|overlay|lowtime)-chart|study-long-chart|study-intraday-chart|cmp-histogram-chart|cmp-overlay-chart)$/.test(el.id);
 }
 
 document.addEventListener('htmx:afterSwap', function(e) {

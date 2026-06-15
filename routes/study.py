@@ -1532,7 +1532,9 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
             overlay_layout["yaxis2"] = overlay_yaxis2_kw
         ofig.update_layout(**overlay_layout)
 
-        lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(low_time_counts, _ref)
+        lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(
+            low_time_counts, _ref, "cc-auto-lowtime-chart"
+        )
         histfig = _cc_megachart_hist_figure(eod, pct_min, pct_max)
 
         if not today_df.empty and today_prev_close:
@@ -1544,8 +1546,8 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 "</div>"
             )
 
-        overlay_chart = _chart_html('cc-overlay-chart', ofig)
-        hist_chart    = _chart_html('cc-hist-chart', histfig) if len(histfig.data) > 0 else ''
+        overlay_chart = _chart_html("cc-auto-overlay-chart", ofig)
+        hist_chart = _chart_html("cc-auto-hist-chart", histfig) if len(histfig.data) > 0 else ""
         overlay_stack = (
             '<div class="cc-overlay-stack">'
             + overlay_chart
@@ -1642,7 +1644,9 @@ def _cc_set_overlay_terminal_from_daily(
     oy[-1] = round(float(y_fin), 2)
 
 
-def _cc_session_low_chart_bundle(low_time_counts: Counter, _ref: datetime.date) -> tuple[str, str]:
+def _cc_session_low_chart_bundle(
+    low_time_counts: Counter, _ref: datetime.date, lowtime_chart_id: str
+) -> tuple[str, str]:
     """HTML for session-low bar chart + caption, or two empty strings if no data."""
     if low_time_counts.total() <= 0:
         return "", ""
@@ -1715,7 +1719,7 @@ def _cc_session_low_chart_bundle(low_time_counts: Counter, _ref: datetime.date) 
     )
     low_html = (
         '<div class="cc-lowtime-chart-wrap">'
-        + _chart_html("cc-lowtime-chart", lowfig)
+        + _chart_html(lowtime_chart_id, lowfig)
         + "</div>"
     )
     cap_html = (
@@ -2056,7 +2060,9 @@ def _build_cc_results_html(store) -> tuple:
             overlay_layout["yaxis2"] = overlay_yaxis2_kw
         ofig.update_layout(**overlay_layout)
 
-        lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(low_time_counts, _ref)
+        lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(
+            low_time_counts, _ref, "cc-manual-lowtime-chart"
+        )
         histfig = _cc_megachart_hist_figure(eod, pct_min, pct_max)
 
         if not today_df.empty and today_prev_close:
@@ -2068,8 +2074,8 @@ def _build_cc_results_html(store) -> tuple:
                 "</div>"
             )
 
-        overlay_chart = _chart_html("cc-overlay-chart", ofig)
-        hist_chart = _chart_html("cc-hist-chart", histfig) if len(histfig.data) > 0 else ""
+        overlay_chart = _chart_html("cc-manual-overlay-chart", ofig)
+        hist_chart = _chart_html("cc-manual-hist-chart", histfig) if len(histfig.data) > 0 else ""
         overlay_stack = (
             '<div class="cc-overlay-stack">'
             + overlay_chart
