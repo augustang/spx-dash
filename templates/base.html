@@ -369,7 +369,16 @@ document.addEventListener('htmx:responseError', function(e) {
 // the old element (with Plotly hover state intact) is detached from DOM but
 // still referenced here. On re-render we restore it and call Plotly.react
 // (not newPlot), which updates data/layout without reinitialising the hover layer.
+//
+// Study / CC charts are rebuilt with new traces after every filter change;
+// re-attaching a detached cached div and calling react reliably kills hover.
+// For those ids we always render into the fresh server element (newPlot).
 var _plotCache = {};
+
+function _skipPlotlyDomCache(el) {
+  if (!el || !el.id) return false;
+  return /^(cc-hist-chart|cc-overlay-chart|cc-lowtime-chart|study-long-chart|study-intraday-chart|cmp-histogram-chart|cmp-overlay-chart)$/.test(el.id);
+}
 
 document.addEventListener('htmx:afterSwap', function(e) {
   e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
@@ -391,20 +400,27 @@ function _renderPlotlyEl(el) {
     return;
   }
 
-  // Restore cached element so Plotly.react can diff without losing hover state.
-  var cached = _plotCache[el.id];
-  if (cached && cached !== el && cached._fullLayout && !document.body.contains(cached)) {
-    if (el.parentNode) el.parentNode.replaceChild(cached, el);
-    // Sync all chart-relevant data attributes so strike pills and event
-    // labels always reflect the freshly rendered element (not stale cache).
-    ['plotly', 'short', 'long', 'events'].forEach(function(key) {
-      if (el.dataset[key] !== undefined) {
-        cached.dataset[key] = el.dataset[key];
-      } else {
-        delete cached.dataset[key];
-      }
-    });
-    el = cached;
+  if (_skipPlotlyDomCache(el)) {
+    if (_plotCache[el.id]) {
+      try { Plotly.purge(_plotCache[el.id]); } catch (_) {}
+      delete _plotCache[el.id];
+    }
+  } else {
+    // Restore cached element so Plotly.react can diff without losing hover state.
+    var cached = _plotCache[el.id];
+    if (cached && cached !== el && cached._fullLayout && !document.body.contains(cached)) {
+      if (el.parentNode) el.parentNode.replaceChild(cached, el);
+      // Sync all chart-relevant data attributes so strike pills and event
+      // labels always reflect the freshly rendered element (not stale cache).
+      ['plotly', 'short', 'long', 'events'].forEach(function(key) {
+        if (el.dataset[key] !== undefined) {
+          cached.dataset[key] = el.dataset[key];
+        } else {
+          delete cached.dataset[key];
+        }
+      });
+      el = cached;
+    }
   }
   if (!document.body.contains(el)) return;
 
