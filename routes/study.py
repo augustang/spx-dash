@@ -290,6 +290,81 @@ def _load_frd_daily() -> pd.DataFrame:
     return df[["Open", "High", "Low", "Close"]].sort_index()
 
 
+def _all_trading_dates(frd1: pd.DataFrame, frd5: pd.DataFrame) -> list[datetime.date]:
+    dates: set[datetime.date] = set()
+    if not frd5.empty:
+        dates.update(frd5.index.date)
+    if not frd1.empty:
+        dates.update(frd1.index.date)
+    return sorted(dates)
+
+
+def _session_close_for_date(
+    d: datetime.date, frd1: pd.DataFrame, frd5: pd.DataFrame
+) -> float | None:
+    """Session close: official daily CSV when available, else last 5-min bar."""
+    d_ts = pd.Timestamp(d).normalize()
+    if not frd1.empty and d_ts in frd1.index:
+        c = float(frd1.loc[d_ts, "Close"])
+        if not np.isnan(c):
+            return c
+    if not frd5.empty:
+        day = frd5[frd5.index.date == d]
+        if not day.empty:
+            c = float(day["Close"].iloc[-1])
+            if not np.isnan(c):
+                return c
+    return None
+
+
+def _prior_session_close(
+    d: datetime.date, frd1: pd.DataFrame, frd5: pd.DataFrame
+) -> float | None:
+    """Previous trading session's close (daily-first, then 5-min)."""
+    prior = [x for x in _all_trading_dates(frd1, frd5) if x < d]
+    if not prior:
+        return None
+    return _session_close_for_date(prior[-1], frd1, frd5)
+
+
+@cache.memoize(timeout=60)
+def _schwab_quote_prior_close() -> float | None:
+    """Schwab live quote closePrice — same prior-close source as the Trading page."""
+    try:
+        q = schwab_client.fetch_live_quote("$SPX")
+        if q and q.get("closePrice"):
+            pc = float(q["closePrice"])
+            if pc > 0 and not np.isnan(pc):
+                return pc
+    except Exception:
+        pass
+    return None
+
+
+def _lookup_today_prior_close(snap: pd.DataFrame | None = None) -> float | None:
+    """Prior session close for Study overlay/checkpoints — Schwab quote first, archives as fallback."""
+    pc = _schwab_quote_prior_close()
+    if pc is not None:
+        return pc
+
+    today = datetime.date.today()
+    frd5 = _load_frd_5min()
+    frd1 = _load_frd_daily()
+    archive_pc = _prior_session_close(today, frd1, frd5)
+    if archive_pc is not None:
+        return archive_pc
+    if snap is not None and not snap.empty:
+        try:
+            last = snap.iloc[-1]
+            pc = float(last["prev_close"])
+            chg = float(last["eod_chg_pct"])
+            if not (np.isnan(pc) or np.isnan(chg)):
+                return round(pc * (1 + chg / 100), 4)
+        except Exception:
+            pass
+    return None
+
+
 def _append_to_archive(df: pd.DataFrame) -> None:
     if df.empty:
         return
@@ -454,9 +529,19 @@ def _build_daily_snapshots() -> pd.DataFrame:
     snap = pd.DataFrame(index=grp_open.index)
     snap.index.name = "date"
     snap["eod_pct"]     = (grp_close / grp_open - 1) * 100
-    snap["eod_chg_pct"] = (grp_close / grp_close.shift(1) - 1) * 100
     snap["eod_low_pct"] = (grp_low   / grp_open - 1) * 100
-    snap["prev_close"]  = grp_close.shift(1)
+    trading = _all_trading_dates(frd1, frd5)
+    close_by_date = {d: _session_close_for_date(d, frd1, frd5) for d in trading}
+    prev_by_date: dict[datetime.date, float | None] = {}
+    for i, d in enumerate(trading):
+        prev_by_date[d] = close_by_date.get(trading[i - 1]) if i > 0 else None
+    snap["prev_close"] = [prev_by_date.get(d, np.nan) for d in snap.index]
+    snap["eod_chg_pct"] = [
+        ((close_by_date[d] / prev_by_date[d] - 1) * 100)
+        if close_by_date.get(d) and prev_by_date.get(d)
+        else np.nan
+        for d in snap.index
+    ]
     if not frd1.empty:
         ds = frd1.sort_index()
         gap_s = (ds["Open"] / ds["Close"].shift(1) - 1) * 100
@@ -1248,17 +1333,7 @@ def _compute_today_checkpoints() -> list:
     df = _get_today_5min_live()
     if df.empty:
         return []
-    # Look up today's prior close from the daily data (same approach as api_intraday).
-    prev_close = None
-    try:
-        today_ts = pd.Timestamp(datetime.date.today())
-        dl = get_spx_daily(1)
-        if not dl.empty:
-            prior_days = dl.index[dl.index < today_ts]
-            if len(prior_days) > 0:
-                prev_close = float(dl.loc[prior_days[-1], "Close"])
-    except Exception:
-        pass
+    prev_close = _lookup_today_prior_close()
     if not prev_close:
         return []
     result = []
@@ -1343,28 +1418,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     _ref     = datetime.date(2000, 1, 3)
     today_df = _get_today_5min_live()
 
-    # Look up today's prior close once — used for both charts and today's overlay line.
-    today_prev_close = None
-    try:
-        today_ts = pd.Timestamp(datetime.date.today())
-        dl = get_spx_daily(1)
-        if not dl.empty:
-            prior_days = dl.index[dl.index < today_ts]
-            if len(prior_days) > 0:
-                today_prev_close = float(dl.loc[prior_days[-1], "Close"])
-    except Exception:
-        pass
-    # Fallback: derive from the snapshot's most recent completed day.
-    if not today_prev_close:
-        try:
-            last = snap.iloc[-1]
-            pc  = float(last["prev_close"])
-            chg = float(last["eod_chg_pct"])
-            if not (np.isnan(pc) or np.isnan(chg)):
-                today_prev_close = round(pc * (1 + chg / 100), 4)
-        except Exception:
-            pass
-
+    today_prev_close = _lookup_today_prior_close(snap)
 
     # ── Stat pills (assembled after megachart block so “Today” can sit right) ─
     eod = matched["eod_chg_pct"].dropna() if "eod_chg_pct" in matched.columns else pd.Series(dtype=float)
@@ -1398,8 +1452,11 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 odf["Low"].idxmin().time(), _CC_LOWTIME_ANCHOR_TIMES
             )] += 1
             ox   = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
-            base = float(matched.loc[od, "prev_close"]) if "prev_close" in matched.columns and not pd.isna(matched.loc[od, "prev_close"]) else float(odf["Open"].iloc[0])
-            if base == 0:
+            pc = matched.loc[od, "prev_close"] if "prev_close" in matched.columns else None
+            base = float(pc) if pc is not None and not pd.isna(pc) else _prior_session_close(
+                pd.Timestamp(od).date(), frd1, frd5
+            )
+            if not base:
                 continue
             oy  = ((odf["Close"] / base - 1) * 100).round(2).tolist()
             _cc_set_overlay_terminal_from_daily(
@@ -1408,6 +1465,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 trade_date=pd.Timestamp(od).date(),
                 base=base,
                 frd1=frd1,
+                frd5=frd5,
                 use_prev_close_norm=True,
             )
             all_oy.append(oy)
@@ -1619,25 +1677,29 @@ def _cc_set_overlay_terminal_from_daily(
     trade_date: datetime.date,
     base: float,
     frd1: pd.DataFrame,
+    frd5: pd.DataFrame,
     use_prev_close_norm: bool,
 ) -> None:
-    """Replace the last intraday point with 16:00 using daily OHLC close (completed days only)."""
-    if not ox or not oy or frd1.empty or trade_date >= datetime.date.today():
+    """Replace the last intraday point with 16:00 using session close (completed days only)."""
+    if not ox or not oy or trade_date >= datetime.date.today():
         return
-    dkey = pd.Timestamp(trade_date).normalize()
-    if dkey not in frd1.index:
-        return
-    row = frd1.loc[dkey]
-    c = float(row.get("Close", np.nan))
-    if np.isnan(c):
+    c = _session_close_for_date(trade_date, frd1, frd5)
+    if c is None or np.isnan(c):
         return
     if use_prev_close_norm:
         if base == 0 or np.isnan(base):
             return
         y_fin = (c / base - 1) * 100
     else:
-        o_ = float(row.get("Open", np.nan))
-        if np.isnan(o_) or o_ == 0:
+        o_ = None
+        d_ts = pd.Timestamp(trade_date).normalize()
+        if not frd1.empty and d_ts in frd1.index:
+            o_ = float(frd1.loc[d_ts, "Open"])
+        elif not frd5.empty:
+            day = frd5[frd5.index.date == trade_date]
+            if not day.empty:
+                o_ = float(day["Open"].iloc[0])
+        if o_ is None or np.isnan(o_) or o_ == 0:
             return
         y_fin = (c / o_ - 1) * 100
     ox[-1] = datetime.datetime.combine(ref_date, datetime.time(16, 0))
@@ -1882,25 +1944,7 @@ def _build_cc_results_html(store) -> tuple:
     lowtime_chart_html = ""
     _ref = datetime.date(2000, 1, 3)
     today_df = _get_today_5min_live()
-    today_prev_close = None
-    try:
-        today_ts = pd.Timestamp(datetime.date.today())
-        dl = get_spx_daily(1)
-        if not dl.empty:
-            prior_days = dl.index[dl.index < today_ts]
-            if len(prior_days) > 0:
-                today_prev_close = float(dl.loc[prior_days[-1], "Close"])
-    except Exception:
-        pass
-    if not today_prev_close:
-        try:
-            last = snap.iloc[-1]
-            pc = float(last["prev_close"])
-            chg = float(last["eod_chg_pct"])
-            if not (np.isnan(pc) or np.isnan(chg)):
-                today_prev_close = round(pc * (1 + chg / 100), 4)
-        except Exception:
-            pass
+    today_prev_close = _lookup_today_prior_close(snap)
 
     frd5 = _load_frd_5min()
     ov_dates = sorted(matched.index.tolist(), reverse=True)
@@ -1925,10 +1969,12 @@ def _build_cc_results_html(store) -> tuple:
             ox = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
             if use_prev_close:
                 pc = matched.loc[od, "prev_close"] if "prev_close" in matched.columns else None
-                base = float(pc) if pc is not None and not pd.isna(pc) else float(odf["Open"].iloc[0])
+                base = float(pc) if pc is not None and not pd.isna(pc) else _prior_session_close(
+                    pd.Timestamp(od).date(), frd1, frd5
+                )
             else:
                 base = float(odf["Open"].iloc[0])
-            if base == 0:
+            if not base:
                 continue
             oy = ((odf["Close"] / base - 1) * 100).round(2).tolist()
             _cc_set_overlay_terminal_from_daily(
@@ -1937,6 +1983,7 @@ def _build_cc_results_html(store) -> tuple:
                 trade_date=pd.Timestamp(od).date(),
                 base=base,
                 frd1=frd1,
+                frd5=frd5,
                 use_prev_close_norm=use_prev_close,
             )
             all_oy.append(oy)
