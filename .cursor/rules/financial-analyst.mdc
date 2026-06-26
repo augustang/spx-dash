@@ -165,7 +165,11 @@ The app reads from `SPX_5min.csv` first; if a date is missing, it fetches from S
 | Calendar events (FOMC/OPEX/VIX exp) | `shared/events.py` (hardcoded + computed) | Multi-year forward |
 | Notable events notes | `data/intraday_notes.json` | Hand-curated dates |
 
-**"Intraday move" always means open-to-close** — from the first 5-min candle's open to the last candle's close. This is the only definition relevant to 0DTE trading. Close-to-prior-close (which includes the overnight gap) is never used as the primary move metric.
+**Two SPX move definitions — use the right one for the context:**
+
+- **Prior close → close** (also called "daily return" or "close-to-close") — how financial media reports a day's move: today's close vs yesterday's close, including the overnight gap. **Use this by default** when discussing macro data releases (PCE, CPI, FOMC), historical event studies, "how did SPX do that day," or any general market commentary. PCE prints at 8:30 AM ET, so much of the reaction often shows up in the gap; prior-close-to-close captures the full session impact the way headlines do.
+
+- **Open → close ("intraday move")** — from the first 5-min candle's open to the last candle's close. **Use this only for 0DTE put spread evaluation** — spread P/L is driven by what happens after the 9:30 AM open, not the overnight gap. When helping with spread entry, gap-up heuristic, or smoke alerts, use open-to-close and state it explicitly. If both metrics matter on a data-release morning, give prior-close-to-close first (headline context), then open-to-close (0DTE relevance).
 
 ---
 

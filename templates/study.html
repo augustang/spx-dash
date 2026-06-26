@@ -172,13 +172,14 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
   }
 });
 
+// Capture phase runs before base.html Plotly hydration on bubble.
 document.body.addEventListener('htmx:afterSwap', function(e) {
   var target = e.detail.target;
   if (target && (target.id === 'cc-auto-section' || target.id === 'cc-manual-section')) {
     target.style.opacity = '';
     target.style.pointerEvents = '';
   }
-});
+}, true);
 
 // Abort in-flight CC requests when a newer one starts to prevent pile-up
 // from rapid stepper clicks or filter changes.

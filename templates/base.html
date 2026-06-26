@@ -375,15 +375,51 @@ document.addEventListener('htmx:responseError', function(e) {
 // For those ids we always render into the fresh server element (newPlot).
 var _plotCache = {};
 
-function _skipPlotlyDomCache(el) {
+var _STUDY_PLOTLY_ID_RE = /^(cc-(auto|manual)-(hist|overlay|lowtime)-chart|study-long-chart|study-intraday-chart|cmp-histogram-chart|cmp-overlay-chart)$/;
+
+function _isStudyPlotlyEl(el) {
   if (!el || !el.id) return false;
-  return /^(cc-(auto|manual)-(hist|overlay|lowtime)-chart|study-long-chart|study-intraday-chart|cmp-histogram-chart|cmp-overlay-chart)$/.test(el.id);
+  return _STUDY_PLOTLY_ID_RE.test(el.id);
+}
+
+function _skipPlotlyDomCache(el) {
+  return _isStudyPlotlyEl(el);
+}
+
+function _isStudyPlotlySwapTarget(target) {
+  if (!target) return false;
+  if (target.matches && target.matches(
+    '#intraday-content, #cc-auto-section, #cc-manual-section, #long-chart-container'
+  )) return true;
+  return !!(target.querySelector && target.querySelector(
+    '[id^="cc-"], #study-intraday-chart, #study-long-chart'
+  ));
+}
+
+function _finalizePlotlyChart(el) {
+  if (!el || !el._fullLayout || !Plotly.Plots) return;
+  Plotly.Plots.resize(el);
+  requestAnimationFrame(function() {
+    if (el._fullLayout && document.body.contains(el)) Plotly.Plots.resize(el);
+  });
+}
+
+function _hydratePlotlyIn(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-plotly]').forEach(function(el) {
+    requestAnimationFrame(function() { _renderPlotlyEl(el); });
+  });
 }
 
 document.addEventListener('htmx:afterSwap', function(e) {
-  e.detail.target.querySelectorAll('[data-plotly]').forEach(function(el) {
-    requestAnimationFrame(function() { _renderPlotlyEl(el); });
-  });
+  _hydratePlotlyIn(e.detail.target);
+});
+
+// Authoritative Study refresh after layout/CSS settles (fixes hover coordinates).
+document.addEventListener('htmx:afterSettle', function(e) {
+  var t = e.detail && e.detail.target;
+  if (!_isStudyPlotlySwapTarget(t)) return;
+  _hydratePlotlyIn(t);
 });
 
 // Named so the retry path can call it without capturing stale closures.
@@ -400,11 +436,17 @@ function _renderPlotlyEl(el) {
     return;
   }
 
-  if (_skipPlotlyDomCache(el)) {
+  var isStudy = _isStudyPlotlyEl(el);
+
+  if (isStudy) {
     if (_plotCache[el.id]) {
       try { Plotly.purge(_plotCache[el.id]); } catch (_) {}
       delete _plotCache[el.id];
     }
+    if (el._fullLayout) {
+      try { Plotly.purge(el); } catch (_) {}
+    }
+    el._plotlyHandlersBound = false;
   } else {
     // Restore cached element so Plotly.react can diff without losing hover state.
     var cached = _plotCache[el.id];
@@ -425,19 +467,21 @@ function _renderPlotlyEl(el) {
   if (!document.body.contains(el)) return;
 
   try {
-    var isUpdate = !!(el._fullLayout);
+    var isUpdate = !isStudy && !!(el._fullLayout);
     var plotFn = isUpdate ? Plotly.react : Plotly.newPlot;
     var fig = JSON.parse(el.dataset.plotly);
     fig.layout.autosize = true;
     plotFn(el, fig.data, fig.layout, { displayModeBar: false }).then(function() {
-      // After Plotly.react the element may have moved to a new DOM parent via
-      // replaceChild. Force a resize so Plotly recalculates container geometry
-      // and reinitialises its hover layer with correct coordinates.
-      if (isUpdate && Plotly.Plots) Plotly.Plots.resize(el);
+      if (isStudy) {
+        _finalizePlotlyChart(el);
+      } else if (isUpdate && Plotly.Plots) {
+        Plotly.Plots.resize(el);
+      }
       _plotCache[el.id] = el;
       positionStrikePills(el);
       positionEventLabels(el);
-      if (!isUpdate) {
+      if (!el._plotlyHandlersBound) {
+        el._plotlyHandlersBound = true;
         el.on('plotly_relayout', function() { positionStrikePills(el); positionEventLabels(el); });
         el.on('plotly_afterplot', function() { positionStrikePills(el); positionEventLabels(el); });
       }
