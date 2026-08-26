@@ -13,8 +13,10 @@ from flask import Blueprint, render_template, request, session, jsonify, make_re
 
 import schwab_client
 from shared.cache import cache
+from shared.candles import candles_to_df
 from shared.chart import create_spx_chart, empty_figure, GREEN_400, GREEN_600, _fmt_date
 from shared.events import get_financial_events
+from shared.header import build_header_ctx as _build_header_ctx
 
 _ET = pytz.timezone("America/New_York")
 
@@ -94,21 +96,14 @@ def get_spx_history_intraday(period="1d"):
         symbol="$SPX", period_type="day", freq_type="minute", freq=5,
         start_date=start_ms, end_date=now_ms,
     )
-    if data and 'candles' in data:
-        df = pd.DataFrame(data['candles'])
-        if df.empty:
-            return df
-        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-        df['datetime'] = df['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/New_York').dt.tz_localize(None)
-        unique_dates = sorted(df['datetime'].dt.date.unique())
-        day_map = {"1d": -1, "3d": -3, "5d": -5}
-        target_dates = unique_dates[day_map.get(period, -1):]
-        df = df[df['datetime'].dt.date.isin(target_dates)]
-        df.set_index('datetime', inplace=True)
-        df = df.between_time('09:30', '16:00')
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+    df = candles_to_df(data)
+    if df.empty:
         return df
-    return pd.DataFrame()
+    unique_dates = sorted(set(df.index.date))
+    day_map = {"1d": -1, "3d": -3, "5d": -5}
+    target_dates = unique_dates[day_map.get(period, -1):]
+    df = df[pd.Series(df.index.date, index=df.index).isin(target_dates)]
+    return df.between_time('09:30', '16:00')
 
 
 @cache.memoize(timeout=3600)
@@ -119,19 +114,7 @@ def get_spx_history_historical():
         symbol="$SPX", period_type="year", freq_type="daily", freq=1,
         start_date=start_ms, end_date=now_ms,
     )
-    if data and 'candles' in data:
-        df = pd.DataFrame(data['candles'])
-        if df.empty:
-            return df
-        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-        df['datetime'] = (
-            df['datetime'].dt.tz_localize('UTC').dt.tz_convert('America/New_York')
-            .dt.tz_localize(None).dt.normalize()
-        )
-        df.set_index('datetime', inplace=True)
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-        return df
-    return pd.DataFrame()
+    return candles_to_df(data, normalize=True)
 
 
 @cache.memoize(timeout=60)
@@ -155,48 +138,6 @@ def get_spx_puts():
         return df.sort_values('strike', ascending=False).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
-
-
-# ── Header helper ────────────────────────────────────────────────────────────
-
-@cache.memoize(timeout=300)
-def _get_market_hours():
-    return schwab_client.fetch_market_hours()
-
-
-def _build_header_ctx():
-    import pytz
-    eastern = pytz.timezone('America/New_York')
-    now = datetime.datetime.now(eastern)
-    date_str = f"{now.strftime('%A %B')} {now.day}, {now.year}"
-    parts = date_str.split(' ')
-    time_str = now.strftime("%H:%M")
-    try:
-        mi = _get_market_hours()
-    except Exception:
-        mi = None
-    if mi and mi.get('start') and mi.get('end'):
-        mkt_start, mkt_end = mi['start'], mi['end']
-        if now < mkt_start:
-            diff = mkt_start - now
-            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
-            status = f"{h}h {m}m until open"
-        elif now <= mkt_end:
-            diff = mkt_end - now
-            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
-            status = f"{h}h {m}m until close"
-        else:
-            status = "(Market Closed)"
-    elif mi:
-        status = "(Market Closed)"
-    else:
-        status = ""
-    return {
-        "date_bold": parts[0],
-        "date_rest": " ".join(parts[1:]),
-        "time": time_str,
-        "status": status,
-    }
 
 
 # ── Main page ────────────────────────────────────────────────────────────────

@@ -2,50 +2,6 @@
 from __future__ import annotations
 
 import datetime
-
-
-def _most_recent_trading_day() -> datetime.date:
-    """Return the most recent date with actual SPX 5-min data <= today.
-
-    Checks the CSV archive first, then falls back to a Schwab API probe for
-    today if the CSV doesn't reach today (e.g. data hasn't been archived yet).
-    Final fallback is weekday math for when neither source is available.
-    """
-    today = datetime.date.today()
-
-    # 1. Try CSV: find the latest date with data that is <= today
-    if os.path.exists(_FRD_5MIN_PATH):
-        try:
-            df = pd.read_csv(_FRD_5MIN_PATH, usecols=["timestamp"], parse_dates=["timestamp"])
-            dates = df["timestamp"].dt.date
-            candidates = [d for d in dates.unique() if d <= today]
-            if candidates:
-                latest_csv = max(candidates)
-                # If CSV already has today, return today
-                if latest_csv == today:
-                    return today
-                # CSV doesn't have today — probe Schwab to see if today has data
-                start_dt = datetime.datetime.combine(today, datetime.time(0, 0))
-                end_dt   = datetime.datetime.combine(today, datetime.time(23, 59, 59))
-                try:
-                    raw = schwab_client.fetch_price_history(
-                        symbol="$SPX", period_type="day", freq_type="minute", freq=5,
-                        start_date=int(start_dt.timestamp() * 1000),
-                        end_date=int(end_dt.timestamp() * 1000),
-                    )
-                    if raw and raw.get("candles"):
-                        return today
-                except Exception:
-                    pass
-                return latest_csv
-        except Exception:
-            pass
-
-    # 2. Fallback: most recent weekday
-    d = today
-    while d.weekday() >= 5:
-        d -= datetime.timedelta(days=1)
-    return d
 import html
 import json
 import os
@@ -58,8 +14,10 @@ from flask import Blueprint, render_template, request, session
 
 import schwab_client
 from shared.cache import cache
+from shared.candles import candles_to_df
 from shared.chart import create_spx_chart, create_long_chart, empty_figure, _HOVERLABEL, GREEN_400, GREEN_600, _fmt_date
 from shared.events import FOMC_DATES, get_financial_events
+from shared.header import build_header_ctx as _build_header_ctx
 
 study_bp = Blueprint('study', __name__)
 
@@ -290,6 +248,48 @@ def _load_frd_daily() -> pd.DataFrame:
     return df[["Open", "High", "Low", "Close"]].sort_index()
 
 
+def _most_recent_trading_day() -> datetime.date:
+    """Return the most recent date with actual SPX 5-min data <= today.
+
+    Checks the (cached, in-memory) CSV archive first, then falls back to a
+    Schwab API probe for today if the archive doesn't reach today yet.
+    Final fallback is weekday math for when neither source is available.
+    """
+    today = datetime.date.today()
+
+    frd5 = _load_frd_5min()
+    if not frd5.empty:
+        latest_csv = None
+        for ts in frd5.index[::-1]:
+            d = ts.date()
+            if d <= today:
+                latest_csv = d
+                break
+        if latest_csv == today:
+            return today
+        if latest_csv is not None:
+            # Archive doesn't have today — probe Schwab to see if today has data
+            try:
+                start_dt = datetime.datetime.combine(today, datetime.time(0, 0))
+                end_dt   = datetime.datetime.combine(today, datetime.time(23, 59, 59))
+                raw = schwab_client.fetch_price_history(
+                    symbol="$SPX", period_type="day", freq_type="minute", freq=5,
+                    start_date=int(start_dt.timestamp() * 1000),
+                    end_date=int(end_dt.timestamp() * 1000),
+                )
+                if raw and raw.get("candles"):
+                    return today
+            except Exception:
+                pass
+            return latest_csv
+
+    # Fallback: most recent weekday
+    d = today
+    while d.weekday() >= 5:
+        d -= datetime.timedelta(days=1)
+    return d
+
+
 def _all_trading_dates(frd1: pd.DataFrame, frd5: pd.DataFrame) -> list[datetime.date]:
     dates: set[datetime.date] = set()
     if not frd5.empty:
@@ -395,17 +395,9 @@ def get_spx_daily(years) -> pd.DataFrame:
         symbol="$SPX", period_type="year", freq_type="daily", freq=1,
         start_date=start_ms, end_date=now_ms,
     )
-    if raw and 'candles' in raw:
-        df = pd.DataFrame(raw['candles'])
-        if not df.empty:
-            df['datetime'] = (
-                pd.to_datetime(df['datetime'], unit='ms')
-                .dt.tz_localize('UTC').dt.tz_convert('America/New_York')
-                .dt.tz_localize(None).dt.normalize()
-            )
-            df.set_index('datetime', inplace=True)
-            df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-            return df
+    df = candles_to_df(raw, normalize=True)
+    if not df.empty:
+        return df
     frd = _load_frd_daily()
     if not frd.empty:
         if years is None:
@@ -414,29 +406,9 @@ def get_spx_daily(years) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-@cache.memoize(timeout=86400)
 def _get_event_daily_df() -> pd.DataFrame:
-    now_ms   = int(datetime.datetime.now().timestamp() * 1000)
-    start_ms = now_ms - 86400 * 1000 * 365 * _EVENT_IMPACT_YEARS
-    raw = schwab_client.fetch_price_history(
-        symbol="$SPX", period_type="year", freq_type="daily", freq=1,
-        start_date=start_ms, end_date=now_ms,
-    )
-    if raw and 'candles' in raw:
-        df = pd.DataFrame(raw['candles'])
-        if not df.empty:
-            df['datetime'] = (
-                pd.to_datetime(df['datetime'], unit='ms')
-                .dt.tz_localize('UTC').dt.tz_convert('America/New_York')
-                .dt.tz_localize(None).dt.normalize()
-            )
-            df.set_index('datetime', inplace=True)
-            df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-            return df
-    frd = _load_frd_daily()
-    if not frd.empty:
-        return frd[frd.index >= pd.Timestamp.now() - pd.DateOffset(years=_EVENT_IMPACT_YEARS)]
-    return pd.DataFrame()
+    """Daily SPX bars for the event-impact window (shares get_spx_daily's cache)."""
+    return get_spx_daily(_EVENT_IMPACT_YEARS)
 
 
 def _fetch_5min_from_schwab(d: datetime.date) -> pd.DataFrame:
@@ -448,21 +420,13 @@ def _fetch_5min_from_schwab(d: datetime.date) -> pd.DataFrame:
         start_date=int(start_dt.timestamp() * 1000),
         end_date=int(end_dt.timestamp() * 1000),
     )
-    if raw and 'candles' in raw:
-        df = pd.DataFrame(raw['candles'])
+    df = candles_to_df(raw)
+    if not df.empty:
+        df = df[df.index.date == d]
         if not df.empty:
-            df['datetime'] = (
-                pd.to_datetime(df['datetime'], unit='ms')
-                .dt.tz_localize('UTC').dt.tz_convert('America/New_York')
-                .dt.tz_localize(None)
-            )
-            df = df[df['datetime'].dt.date == d]
-            if not df.empty:
-                df.set_index('datetime', inplace=True)
-                df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-                df = df.between_time('09:30', '16:00')
-                _append_to_archive(df)
-                return df
+            df = df.between_time('09:30', '16:00')
+            _append_to_archive(df)
+            return df
     return pd.DataFrame()
 
 
@@ -492,19 +456,11 @@ def _get_today_5min_live() -> pd.DataFrame:
         start_date=int(start_dt.timestamp() * 1000),
         end_date=int(end_dt.timestamp() * 1000),
     )
-    if raw and 'candles' in raw:
-        df = pd.DataFrame(raw['candles'])
+    df = candles_to_df(raw)
+    if not df.empty:
+        df = df[df.index.date == today]
         if not df.empty:
-            df['datetime'] = (
-                pd.to_datetime(df['datetime'], unit='ms')
-                .dt.tz_localize('UTC').dt.tz_convert('America/New_York')
-                .dt.tz_localize(None)
-            )
-            df = df[df['datetime'].dt.date == today]
-            if not df.empty:
-                df.set_index('datetime', inplace=True)
-                df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-                return df.between_time('09:30', '16:00')
+            return df.between_time('09:30', '16:00')
     # Fallback to the CSV archive for today's rows if Schwab is unavailable.
     frd = _load_frd_5min()
     if not frd.empty:
@@ -583,48 +539,6 @@ def _build_daily_snapshots() -> pd.DataFrame:
     snap["day_of_week"] = [d.weekday() for d in snap.index]
     snap["month"]       = [d.month     for d in snap.index]
     return snap
-
-
-# ── Helper: build header context (shared with trading) ───────────────────────
-
-@cache.memoize(timeout=300)
-def _get_market_hours():
-    return schwab_client.fetch_market_hours()
-
-
-def _build_header_ctx():
-    import pytz
-    eastern = pytz.timezone('America/New_York')
-    now = datetime.datetime.now(eastern)
-    date_str = f"{now.strftime('%A %B')} {now.day}, {now.year}"
-    parts = date_str.split(' ')
-    time_str = now.strftime("%H:%M")
-    try:
-        mi = _get_market_hours()
-    except Exception:
-        mi = None
-    if mi and mi.get('start') and mi.get('end'):
-        mkt_start, mkt_end = mi['start'], mi['end']
-        if now < mkt_start:
-            diff = mkt_start - now
-            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
-            status = f"{h}h {m}m until open"
-        elif now <= mkt_end:
-            diff = mkt_end - now
-            h, m = int(diff.total_seconds() // 3600), int((diff.total_seconds() % 3600) // 60)
-            status = f"{h}h {m}m until close"
-        else:
-            status = "(Market Closed)"
-    elif mi:
-        status = "(Market Closed)"
-    else:
-        status = ""
-    return {
-        "date_bold": parts[0],
-        "date_rest": " ".join(parts[1:]),
-        "time": time_str,
-        "status": status,
-    }
 
 
 # ── Chart helper ─────────────────────────────────────────────────────────────
@@ -726,14 +640,11 @@ def api_intraday():
     if not date_str:
         return ''
     selected_date = datetime.date.fromisoformat(date_str)
-    # Today: always fetch from Schwab so live data is current, not stale CSV bars.
+    # Today: use the short-lived live fetch (2-min cache, CSV fallback inside)
+    # so data stays current without rewriting the archive on every request.
     # Historical: use the memoized CSV-backed path.
     if selected_date == datetime.date.today():
-        df_day = _fetch_5min_from_schwab(selected_date)
-        if df_day.empty:
-            frd = _load_frd_5min()
-            if not frd.empty:
-                df_day = frd[frd.index.date == selected_date][["Open", "High", "Low", "Close"]]
+        df_day = _get_today_5min_live()
     else:
         df_day = get_spx_5min_for_date(selected_date)
     today_iso    = datetime.date.today().isoformat()
@@ -851,25 +762,15 @@ def api_cmp_update():
         store["gap"]   = request.form.get('gap',   store["gap"])
 
     _save_cmp_store(store)
-    n_badge_html, charts_html = _build_cmp_charts_html(store)
-    return render_template('partials/cmp_section.html',
-        store=store,
-        cmp_colors=_CMP_COLORS,
-        entry_types=_CMP_ENTRY_TYPES,
-        offset_opts=_CMP_OFFSET_OPTS,
-        range_opts=_CMP_RANGE_OPTS,
-        gap_opts=_CMP_GAP_OPTS,
-        today=datetime.date.today().isoformat(),
-        min_date=(_FRD_MIN_DATE if os.path.exists(_FRD_5MIN_PATH)
-                  else (datetime.date.today() - datetime.timedelta(days=MINUTE_HISTORY_DAYS))).isoformat(),
-        n_badge_html=n_badge_html,
-        charts_html=charts_html,
-    )
+    return _render_cmp(store)
 
 
 @study_bp.route('/api/study/cmp')
 def api_cmp_get():
-    store = _get_cmp_store()
+    return _render_cmp(_get_cmp_store())
+
+
+def _render_cmp(store):
     n_badge_html, charts_html = _build_cmp_charts_html(store)
     return render_template('partials/cmp_section.html',
         store=store,
@@ -978,18 +879,8 @@ def _build_cmp_charts_html(store) -> str:
             h_ppos = (eod_s >= 0).mean() * 100
             h_std  = eod_s.std()
             h_n    = len(eod_s)
-            if h_n < 30:
-                hbg = "#FFA743"
-            elif h_n < 75:
-                hbg = "#ecff8b"
-            else:
-                hbg = "#13ff98"
             hist_fig = _build_histogram_figure(eod_s, x_label="EOD % from prior close")
-            n_badge_html = (
-                f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
-                f'background:{hbg};font-size:12px;font-weight:400;'
-                f'color:#1A1A1A;">N = {h_n}</div>'
-            )
+            n_badge_html = _n_badge_html(h_n)
             hist_html = (
                 _stat_pills_html(h_mean, h_med, h_ppos, h_std)
                 + _chart_html('cmp-histogram-chart', hist_fig)
@@ -1064,130 +955,6 @@ def _build_cmp_charts_html(store) -> str:
 
 
 # ── Section 4: Conditional comparison ────────────────────────────────────────
-
-@study_bp.route('/api/study/cc', methods=['POST'])
-def api_cc_update():
-    store = _get_cc_store()
-    action = request.form.get('action')
-    if action == 'add':
-        cid = store["next_id"]
-        store["next_id"] += 1
-        store["ids"].append(cid)
-        store["entries"].append({
-            "id": cid, "type": _CC_COND_TYPES[0], "enabled": True,
-            "time": "11:00", "pct_min": 0.2, "pct_max": 0.4,
-            "event": "VIX Exp", "days_min": -3, "days_max": 3,
-            "gap_min": -1.0, "gap_max": 1.0,
-            "dow": list(range(5)), "months": list(range(1, 13)),
-        })
-    elif action == 'clear':
-        store["ids"] = []
-        store["entries"] = []
-    elif action == 'delete':
-        cid = int(request.form.get('id', -1))
-        store["entries"] = [e for e in store["entries"] if e["id"] != cid]
-        store["ids"]     = [i for i in store["ids"]     if i != cid]
-    elif action == 'update':
-        cid   = int(request.form.get('id', -1))
-        field = request.form.get('field')
-        value = request.form.get('value')
-        for entry in store["entries"]:
-            if entry["id"] == cid and field:
-                if field in ("pct_min", "pct_max", "gap_min", "gap_max"):
-                    try:
-                        entry[field] = float(value)
-                    except (ValueError, TypeError):
-                        pass
-                elif field in ("days_min", "days_max"):
-                    try:
-                        entry[field] = int(value)
-                    except (ValueError, TypeError):
-                        pass
-                elif field == "enabled":
-                    entry["enabled"] = value == "true"
-                elif field == "dow_toggle":
-                    idx = int(value)
-                    dow = list(entry.get("dow", []))
-                    if idx in dow:
-                        dow.remove(idx)
-                    else:
-                        dow.append(idx)
-                    entry["dow"] = sorted(dow)
-                elif field == "month_toggle":
-                    mo = int(value)
-                    months = list(entry.get("months", []))
-                    if mo in months:
-                        months.remove(mo)
-                    else:
-                        months.append(mo)
-                    entry["months"] = sorted(months)
-                elif field in ("dow", "months"):
-                    try:
-                        entry[field] = json.loads(value)
-                    except Exception:
-                        pass
-                else:
-                    entry[field] = value
-    elif action == 'filter':
-        br = "auto" if store.get("auto_mode") else "manual"
-        _cc_apply_filter_partial(store, branch=br)
-        store["norm"] = request.form.get("norm", store.get("norm", "% from prior close"))
-    elif action == 'auto':
-        store["auto_mode"] = True
-    elif action == 'manual':
-        store["auto_mode"] = False
-    elif action == 'set_threshold':
-        try:
-            store["match_threshold"] = float(request.form.get("match_threshold", 0.5))
-        except (ValueError, TypeError):
-            pass
-    elif action == 'set_tolerance':
-        try:
-            store["tolerance"] = max(0.05, round(float(request.form.get("value", 0.10)), 2))
-        except (ValueError, TypeError):
-            pass
-    elif action == 'set_view':
-        br = "auto" if store.get("auto_mode") else "manual"
-        _cc_apply_set_view_partial(store, branch=br)
-    _save_cc_store(store)
-    today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
-    n_badge_html, results_html = _build_cc_results_html(store)
-    return render_template('partials/cc_section.html',
-        store=store,
-        cond_types=_CC_COND_TYPES,
-        event_opts=_CC_EVENT_OPTS,
-        time_opts=_CC_TIME_OPTS,
-        dow_labels=_CC_DOW_LABELS,
-        mon_labels=_CC_MON_LABELS,
-        range_opts=_CMP_RANGE_OPTS,
-        gap_opts=_CMP_GAP_OPTS,
-        norm_opts=_CC_NORM_OPTS,
-        n_badge_html=n_badge_html,
-        results_html=results_html,
-        today_checkpoints=today_checkpoints,
-    )
-
-
-@study_bp.route('/api/study/cc')
-def api_cc_get():
-    store = _get_cc_store()
-    today_checkpoints = _compute_today_checkpoints() if store.get("auto_mode") else []
-    n_badge_html, results_html = _build_cc_results_html(store)
-    return render_template('partials/cc_section.html',
-        store=store,
-        cond_types=_CC_COND_TYPES,
-        event_opts=_CC_EVENT_OPTS,
-        time_opts=_CC_TIME_OPTS,
-        dow_labels=_CC_DOW_LABELS,
-        mon_labels=_CC_MON_LABELS,
-        range_opts=_CMP_RANGE_OPTS,
-        gap_opts=_CMP_GAP_OPTS,
-        norm_opts=_CC_NORM_OPTS,
-        n_badge_html=n_badge_html,
-        results_html=results_html,
-        today_checkpoints=today_checkpoints,
-    )
-
 
 def _render_cc_auto(store):
     """Build and return the rendered auto-mode CC partial."""
@@ -1363,6 +1130,140 @@ def _score_days_against_checkpoints(snap: pd.DataFrame, checkpoints: list, toler
     return scores
 
 
+def _n_badge_html(n: int) -> str:
+    bg = "#ff4646" if n == 0 else ("#FFA743" if n < 30 else ("#ecff8b" if n < 75 else "#13ff98"))
+    return (f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
+            f'background:{bg};font-size:12px;font-weight:400;color:#1A1A1A;">N = {n}</div>')
+
+
+_CC_TODAY_LEGEND_HTML = (
+    '<div style="display:flex;align-items:center;gap:6px;">'
+    '<span style="display:inline-block;width:20px;height:1.5px;'
+    'background:#4B7BFF;border-radius:1px;"></span>'
+    '<span style="font-size:11px;color:#555;">Today</span>'
+    "</div>"
+)
+
+
+def _cc_add_today_trace(ofig, today_df, today_prev_close, _ref, all_oy) -> bool:
+    """Add today's blue intraday line + trailing dot to the overlay figure.
+
+    Appends today's % series to all_oy so it participates in the shared
+    y-range. Returns True if the trace was added.
+    """
+    if today_df.empty or not today_prev_close:
+        return False
+    tdf = today_df[today_df.index.time <= datetime.time(16, 4)]
+    if tdf.empty:
+        return False
+    tx = [datetime.datetime.combine(_ref, ts.time()) for ts in tdf.index]
+    ty = ((tdf["Close"] / today_prev_close - 1) * 100).round(2).tolist()
+    today_prices = tdf["Close"].round(2).tolist()
+    all_oy.append(ty)
+    ofig.add_trace(go.Scatter(
+        x=tx, y=ty, mode="lines",
+        name="Today", showlegend=False,
+        line=dict(color="#4B7BFF", width=1.5),
+        opacity=1.0,
+        customdata=today_prices,
+        hovertemplate="Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>",
+    ))
+    ofig.add_trace(go.Scatter(
+        x=[tx[-1]], y=[ty[-1]], mode="markers",
+        marker=dict(
+            color="#4B7BFF", size=4,
+            line=dict(color="rgba(75,123,255,0.3)", width=8),
+        ),
+        showlegend=False, hoverinfo="skip",
+    ))
+    return True
+
+
+def _cc_finalize_overlay_layout(ofig, all_oy, today_prev_close, _ref):
+    """Apply the shared megachart-overlay layout (axes, margins, hover).
+
+    When a shared % range can be computed, adds the invisible dummy trace that
+    forces the y2 price axis to render. Returns (pct_min, pct_max) — both None
+    when no range was computed.
+    """
+    flat_y = [v for series in all_oy for v in series]
+    pct_min = pct_max = None
+    overlay_yaxis_kw: dict = dict(
+        showgrid=True, gridcolor="#F0F0F0",
+        showticklabels=False, ticks="", ticklen=0,
+        automargin=False,
+    )
+    overlay_yaxis2_kw: dict = {}
+    if flat_y and today_prev_close:
+        buf = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
+        pct_min = min(flat_y) - buf
+        pct_max = max(flat_y) + buf
+        price_min = today_prev_close * (1 + pct_min / 100)
+        price_max = today_prev_close * (1 + pct_max / 100)
+        # Dummy invisible trace forces the price axis (yaxis2) to render.
+        ofig.add_trace(go.Scatter(
+            x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
+            y=[price_min],
+            yaxis="y2", mode="markers",
+            marker=dict(opacity=0, size=1),
+            showlegend=False, hoverinfo="skip",
+        ))
+        overlay_yaxis_kw["range"] = [pct_min, pct_max]
+        overlay_yaxis2_kw = dict(
+            side="left", overlaying="y",
+            range=[price_min, price_max],
+            showgrid=False, tickformat=",.0f",
+            tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+            ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+        )
+    overlay_layout: dict = dict(
+        font=dict(family="Inter, sans-serif"),
+        height=440, margin=dict(l=0, r=0, t=16, b=30),
+        plot_bgcolor="white", paper_bgcolor="white",
+        hovermode="closest", hoverdistance=-1,
+        showlegend=False,
+        uirevision="cc-megachart-overlay",
+        hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
+                        font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
+        xaxis=dict(
+            showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
+            tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
+            ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
+            type='date',
+            range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
+                   datetime.datetime.combine(_ref, datetime.time(16, 15))],
+            rangeslider=dict(visible=False),
+        ),
+        yaxis=overlay_yaxis_kw,
+    )
+    if overlay_yaxis2_kw:
+        overlay_layout["yaxis2"] = overlay_yaxis2_kw
+    ofig.update_layout(**overlay_layout)
+    return pct_min, pct_max
+
+
+def _cc_megachart_row_html(ofig, histfig, lowtime_chart_html, session_low_caption,
+                           chart_prefix: str, footer_text: str) -> str:
+    """Assemble the overlay + histogram flex row shared by auto and manual CC."""
+    overlay_chart = _chart_html(f"{chart_prefix}-overlay-chart", ofig)
+    hist_chart = _chart_html(f"{chart_prefix}-hist-chart", histfig) if len(histfig.data) > 0 else ""
+    overlay_stack = (
+        '<div class="cc-overlay-stack">'
+        + overlay_chart
+        + lowtime_chart_html
+        + '</div>'
+    )
+    return (
+        '<div class="cc-megachart-row">'
+        + f'<div class="cc-megachart-overlay">{overlay_stack}</div>'
+        + f'<div class="cc-megachart-hist">{hist_chart}</div>'
+        + '</div>'
+        + session_low_caption
+        + '<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
+        + footer_text + '</p>'
+    )
+
+
 def _build_cc_auto_results_html(store, snap) -> tuple:
     checkpoints   = _compute_today_checkpoints()
     tolerance     = float(store.get("tolerance", 0.5))
@@ -1407,11 +1308,7 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     matched        = snap.loc[matched_scores.index]
 
     n = len(matched)
-    bg = "#ff4646" if n == 0 else ("#FFA743" if n < 30 else ("#ecff8b" if n < 75 else "#13ff98"))
-    n_badge_html = (
-        f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
-        f'background:{bg};font-size:12px;font-weight:400;color:#1A1A1A;">N = {n}</div>'
-    )
+    n_badge_html = _n_badge_html(n)
     if n == 0:
         return n_badge_html, ""
 
@@ -1497,129 +1394,21 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
                 ) if trace_opacity > 0 else None,
             ))
 
-        # ── Today's path ──────────────────────────────────────────────────
-        ty: list[float] = []
-        if not today_df.empty and today_prev_close:
-            today_df = today_df[today_df.index.time <= datetime.time(16, 4)]
-            if today_prev_close != 0:
-                tx = [datetime.datetime.combine(_ref, ts.time()) for ts in today_df.index]
-                ty = ((today_df["Close"] / today_prev_close - 1) * 100).round(2).tolist()
-                today_prices = today_df["Close"].round(2).tolist()
-                all_oy.append(ty)
-                ofig.add_trace(go.Scatter(
-                    x=tx, y=ty, mode="lines",
-                    name="Today", showlegend=False,
-                    line=dict(color="#4B7BFF", width=1.5),
-                    opacity=1.0,
-                    customdata=today_prices,
-                    hovertemplate='Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>',
-                ))
-                # Trailing dot at the last point of today's line
-                ofig.add_trace(go.Scatter(
-                    x=[tx[-1]], y=[ty[-1]], mode="markers",
-                    marker=dict(
-                        color="#4B7BFF", size=4,
-                        line=dict(color="rgba(75,123,255,0.3)", width=8),
-                    ),
-                    showlegend=False, hoverinfo="skip",
-                ))
-
+        today_added = _cc_add_today_trace(ofig, today_df, today_prev_close, _ref, all_oy)
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-
-        # ── Compute shared % range ────────────────────────────────────────
-        flat_y = [v for series in all_oy for v in series]
-        if flat_y and today_prev_close:
-            buf       = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
-            pct_min   = min(flat_y) - buf
-            pct_max   = max(flat_y) + buf
-            price_min = today_prev_close * (1 + pct_min / 100)
-            price_max = today_prev_close * (1 + pct_max / 100)
-            # Dummy invisible trace forces the price axis (yaxis2) to render.
-            ofig.add_trace(go.Scatter(
-                x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
-                y=[price_min],
-                yaxis="y2", mode="markers",
-                marker=dict(opacity=0, size=1),
-                showlegend=False, hoverinfo="skip",
-            ))
-            overlay_yaxis_kw: dict = dict(
-                range=[pct_min, pct_max],
-                showgrid=True, gridcolor="#F0F0F0",
-                showticklabels=False, ticks="", ticklen=0,
-                automargin=False,
-            )
-            overlay_yaxis2_kw: dict = dict(
-                side="left", overlaying="y",
-                range=[price_min, price_max],
-                showgrid=False, tickformat=",.0f",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-            )
-            overlay_margin = dict(l=0, r=0, t=16, b=30)
-        else:
-            pct_min = pct_max = None
-            overlay_yaxis_kw  = dict(
-                showgrid=True, gridcolor="#F0F0F0",
-                showticklabels=False, ticks="", ticklen=0,
-                automargin=False,
-            )
-            overlay_yaxis2_kw = {}
-            overlay_margin    = dict(l=0, r=0, t=16, b=30)
-
-        overlay_layout: dict = dict(
-            font=dict(family="Inter, sans-serif"),
-            height=440, margin=overlay_margin,
-            plot_bgcolor="white", paper_bgcolor="white",
-            hovermode="closest", hoverdistance=-1,
-            showlegend=False,
-            uirevision="cc-megachart-overlay",
-            hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
-                            font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
-            xaxis=dict(
-                showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                type='date',
-                range=[datetime.datetime.combine(_ref, datetime.time(9, 30)),
-                       datetime.datetime.combine(_ref, datetime.time(16, 15))],
-                rangeslider=dict(visible=False),
-            ),
-            yaxis=overlay_yaxis_kw,
-        )
-        if overlay_yaxis2_kw:
-            overlay_layout["yaxis2"] = overlay_yaxis2_kw
-        ofig.update_layout(**overlay_layout)
+        pct_min, pct_max = _cc_finalize_overlay_layout(ofig, all_oy, today_prev_close, _ref)
 
         lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(
             low_time_counts, _ref, "cc-auto-lowtime-chart"
         )
         histfig = _cc_megachart_hist_figure(eod, pct_min, pct_max)
 
-        if not today_df.empty and today_prev_close:
-            today_pills_right = (
-                '<div style="display:flex;align-items:center;gap:6px;">'
-                '<span style="display:inline-block;width:20px;height:1.5px;'
-                'background:#4B7BFF;border-radius:1px;"></span>'
-                '<span style="font-size:11px;color:#555;">Today</span>'
-                "</div>"
-            )
+        if today_added:
+            today_pills_right = _CC_TODAY_LEGEND_HTML
 
-        overlay_chart = _chart_html("cc-auto-overlay-chart", ofig)
-        hist_chart = _chart_html("cc-auto-hist-chart", histfig) if len(histfig.data) > 0 else ""
-        overlay_stack = (
-            '<div class="cc-overlay-stack">'
-            + overlay_chart
-            + lowtime_chart_html
-            + '</div>'
-        )
-        megachart_html = (
-            '<div class="cc-megachart-row">'
-            + f'<div class="cc-megachart-overlay">{overlay_stack}</div>'
-            + f'<div class="cc-megachart-hist">{hist_chart}</div>'
-            + '</div>'
-            + session_low_caption
-            + f'<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
-            f'{n} days matching ≥ {int(threshold * 100)}% of {n_checkpoints} checkpoints</p>'
+        megachart_html = _cc_megachart_row_html(
+            ofig, histfig, lowtime_chart_html, session_low_caption, "cc-auto",
+            f'{n} days matching ≥ {int(threshold * 100)}% of {n_checkpoints} checkpoints',
         )
 
     pills_html = ""
@@ -1912,18 +1701,7 @@ def _build_cc_results_html(store) -> tuple:
                 on_event = matched[col].fillna(1) == 0
                 matched = matched[~on_event]
     n = len(matched)
-    if n == 0:
-        bg = "#ff4646"
-    elif n < 30:
-        bg = "#FFA743"
-    elif n < 75:
-        bg = "#ecff8b"
-    else:
-        bg = "#13ff98"
-
-    n_badge_html = (f'<div style="display:inline-block;padding:4px 12px;border-radius:7px;'
-                    f'background:{bg};font-size:12px;font-weight:400;'
-                    f'color:#1A1A1A;">N = {n}</div>')
+    n_badge_html = _n_badge_html(n)
     if n == 0:
         return n_badge_html, ""
 
@@ -2018,125 +1796,21 @@ def _build_cc_results_html(store) -> tuple:
                 ),
             ))
 
-        if not today_df.empty and today_prev_close:
-            tdf = today_df[today_df.index.time <= datetime.time(16, 4)]
-            if today_prev_close != 0 and not tdf.empty:
-                tx = [datetime.datetime.combine(_ref, ts.time()) for ts in tdf.index]
-                ty = ((tdf["Close"] / today_prev_close - 1) * 100).round(2).tolist()
-                today_prices = tdf["Close"].round(2).tolist()
-                all_oy.append(ty)
-                ofig.add_trace(go.Scatter(
-                    x=tx, y=ty, mode="lines",
-                    name="Today", showlegend=False,
-                    line=dict(color="#4B7BFF", width=1.5),
-                    opacity=1.0,
-                    customdata=today_prices,
-                    hovertemplate="Today: %{y:+.2f}% · %{customdata:,.2f}<extra></extra>",
-                ))
-                ofig.add_trace(go.Scatter(
-                    x=[tx[-1]], y=[ty[-1]], mode="markers",
-                    marker=dict(
-                        color="#4B7BFF", size=4,
-                        line=dict(color="rgba(75,123,255,0.3)", width=8),
-                    ),
-                    showlegend=False, hoverinfo="skip",
-                ))
-
+        today_added = _cc_add_today_trace(ofig, today_df, today_prev_close, _ref, all_oy)
         ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-        flat_y = [v for series in all_oy for v in series]
-        pct_min = pct_max = None
-        overlay_yaxis2_kw: dict = {}
-        if flat_y and today_prev_close:
-            buf = max(0.05, (max(flat_y) - min(flat_y)) * 0.04)
-            pct_min = min(flat_y) - buf
-            pct_max = max(flat_y) + buf
-            price_min = today_prev_close * (1 + pct_min / 100)
-            price_max = today_prev_close * (1 + pct_max / 100)
-            ofig.add_trace(go.Scatter(
-                x=[datetime.datetime.combine(_ref, datetime.time(9, 30))],
-                y=[price_min],
-                yaxis="y2", mode="markers",
-                marker=dict(opacity=0, size=1),
-                showlegend=False, hoverinfo="skip",
-            ))
-            overlay_yaxis_kw: dict = dict(
-                range=[pct_min, pct_max],
-                showgrid=True, gridcolor="#F0F0F0",
-                showticklabels=False, ticks="", ticklen=0,
-                automargin=False,
-            )
-            overlay_yaxis2_kw = dict(
-                side="left", overlaying="y",
-                range=[price_min, price_max],
-                showgrid=False, tickformat=",.0f",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-            )
-            overlay_margin = dict(l=0, r=0, t=16, b=30)
-        else:
-            overlay_yaxis_kw = dict(
-                showgrid=True, gridcolor="#F0F0F0",
-                showticklabels=False, ticks="", ticklen=0,
-                automargin=False,
-            )
-            overlay_margin = dict(l=0, r=0, t=16, b=30)
-
-        overlay_layout: dict = dict(
-            font=dict(family="Inter, sans-serif"),
-            height=440, margin=overlay_margin,
-            plot_bgcolor="white", paper_bgcolor="white",
-            hovermode="closest", hoverdistance=-1,
-            showlegend=False,
-            uirevision="cc-megachart-overlay",
-            hoverlabel=dict(bordercolor="rgba(0,0,0,0)",
-                            font=dict(family="Inter, sans-serif", size=12, color="#1E1E1E")),
-            xaxis=dict(
-                showgrid=True, gridcolor="#F0F0F0", tickformat="%H:%M",
-                tickfont=dict(family="Inter, sans-serif", color="#808080", size=8),
-                ticks="outside", ticklen=6, tickcolor="rgba(0,0,0,0)",
-                type="date",
-                range=[
-                    datetime.datetime.combine(_ref, datetime.time(9, 30)),
-                    datetime.datetime.combine(_ref, datetime.time(16, 15)),
-                ],
-                rangeslider=dict(visible=False),
-            ),
-            yaxis=overlay_yaxis_kw,
-        )
-        if overlay_yaxis2_kw:
-            overlay_layout["yaxis2"] = overlay_yaxis2_kw
-        ofig.update_layout(**overlay_layout)
+        pct_min, pct_max = _cc_finalize_overlay_layout(ofig, all_oy, today_prev_close, _ref)
 
         lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(
             low_time_counts, _ref, "cc-manual-lowtime-chart"
         )
         histfig = _cc_megachart_hist_figure(eod, pct_min, pct_max)
 
-        if not today_df.empty and today_prev_close:
-            today_pills_right = (
-                '<div style="display:flex;align-items:center;gap:6px;">'
-                '<span style="display:inline-block;width:20px;height:1.5px;'
-                'background:#4B7BFF;border-radius:1px;"></span>'
-                '<span style="font-size:11px;color:#555;">Today</span>'
-                "</div>"
-            )
+        if today_added:
+            today_pills_right = _CC_TODAY_LEGEND_HTML
 
-        overlay_chart = _chart_html("cc-manual-overlay-chart", ofig)
-        hist_chart = _chart_html("cc-manual-hist-chart", histfig) if len(histfig.data) > 0 else ""
-        overlay_stack = (
-            '<div class="cc-overlay-stack">'
-            + overlay_chart
-            + lowtime_chart_html
-            + "</div>"
-        )
-        megachart_html = (
-            '<div class="cc-megachart-row">'
-            + f'<div class="cc-megachart-overlay">{overlay_stack}</div>'
-            + f'<div class="cc-megachart-hist">{hist_chart}</div>'
-            + "</div>"
-            + session_low_caption
-            + '<p style="font-size:11px;color:#888;margin-top:10px;margin-bottom:0">'
-            f"{n} days matching manual filters</p>"
+        megachart_html = _cc_megachart_row_html(
+            ofig, histfig, lowtime_chart_html, session_low_caption, "cc-manual",
+            f"{n} days matching manual filters",
         )
 
     pills_html = ""
