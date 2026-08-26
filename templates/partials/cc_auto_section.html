@@ -35,17 +35,172 @@
               hx-swap="innerHTML"
               name="match_threshold">
         {% set mt = store.match_threshold | float %}
-        {% for val, label in [("0.9", "90%"), ("0.75", "75%"), ("0.6", "60%"), ("0.5", "50%")] %}
+        {% for val, label in [("0.9", "90%"), ("0.75", "75%"), ("0.6", "60%"), ("0.5", "50%"), ("0.0", "Off")] %}
         <option value="{{ val }}" {% if (mt - val|float)|abs < 0.01 %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+    </div>
+    <div style="display:flex;gap:8px;align-items:baseline;align-self:flex-end">
+      <button class="btn-outline"
+              hx-post="/api/study/cc/auto"
+              hx-vals='{"action":"add_condition"}'
+              hx-target="#cc-auto-section"
+              hx-swap="innerHTML">＋  Add condition</button>
+      {% if store.auto_conditions %}
+      <button class="btn-text"
+              hx-post="/api/study/cc/auto"
+              hx-vals='{"action":"clear_conditions"}'
+              hx-target="#cc-auto-section"
+              hx-swap="innerHTML">Clear all</button>
+      {% endif %}
     </div>
     {% if n_badge_html %}
     <div style="margin-left:auto;align-self:flex-start">{{ n_badge_html | safe }}</div>
     {% endif %}
   </div>
+  {% for entry in store.auto_conditions %}
+  {% set ct = entry.type %}
+  <hr style="border:none;border-top:1px solid #EBEBEB;margin:{% if loop.first %}24px 0 12px{% else %}12px 0 6px{% endif %}" />
+  <div class="{% if not entry.enabled %}row-disabled{% endif %}" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div style="min-width:180px">
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Condition type</p>
+      <select class="figma-dropdown"
+              hx-post="/api/study/cc/auto"
+              hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"type"}'
+              hx-target="#cc-auto-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for t in auto_cond_types %}
+        <option value="{{ t }}" {% if t == ct %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <!-- Filters (gap + range + view) -->
+    {% if ct == "Days from event" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Event</p>
+      <select class="figma-dropdown"
+              hx-post="/api/study/cc/auto"
+              hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"event"}'
+              hx-trigger="change"
+              hx-target="#cc-auto-section"
+              hx-swap="innerHTML"
+              name="value">
+        {% for e in event_opts %}
+        <option value="{{ e }}" {% if e == entry.event %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Min days</p>
+      <div class="num-field-row" style="width:100px">
+        <input id="ac-days-min-{{ entry.id }}" type="number" step="1" value="{{ entry.days_min }}"
+               class="num-field-input"
+               hx-post="/api/study/cc/auto"
+               hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"days_min"}'
+               hx-include="input"
+               hx-trigger="change"
+               hx-target="#cc-auto-section"
+               hx-swap="innerHTML"
+               name="value" />
+        <div class="icon-btn-group">
+          <button type="button" class="icon-btn" data-field="ac-days-min-{{ entry.id }}" data-dir="-1">
+            <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
+          </button>
+          <button type="button" class="icon-btn" data-field="ac-days-min-{{ entry.id }}" data-dir="+1">
+            <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
+          </button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Max days</p>
+      <div class="num-field-row" style="width:100px">
+        <input id="ac-days-max-{{ entry.id }}" type="number" step="1" value="{{ entry.days_max }}"
+               class="num-field-input"
+               hx-post="/api/study/cc/auto"
+               hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"days_max"}'
+               hx-include="input"
+               hx-trigger="change"
+               hx-target="#cc-auto-section"
+               hx-swap="innerHTML"
+               name="value" />
+        <div class="icon-btn-group">
+          <button type="button" class="icon-btn" data-field="ac-days-max-{{ entry.id }}" data-dir="-1">
+            <img src="/static/icons/Edit/Remove_Minus.svg" width="16" height="16" />
+          </button>
+          <button type="button" class="icon-btn" data-field="ac-days-max-{{ entry.id }}" data-dir="+1">
+            <img src="/static/icons/Edit/Add_Plus.svg" width="16" height="16" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {% elif ct == "Day of week" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Select days</p>
+      <div style="display:flex;gap:4px">
+        {% for label in dow_labels %}
+        {% set i = loop.index0 %}
+        <label class="pill-label {% if i in entry.dow %}active{% endif %}">
+          <input type="checkbox"
+                 {% if i in entry.dow %}checked{% endif %}
+                 hx-post="/api/study/cc/auto"
+                 hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"dow_toggle","value":"{{ i }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-auto-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% elif ct == "Month" %}
+    <div>
+      <p style="font-size:11px;color:#999;margin-bottom:8px">Select months</p>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% for i in range(1, 13) %}
+        <label class="pill-label {% if i in entry.months %}active{% endif %}">
+          <input type="checkbox"
+                 {% if i in entry.months %}checked{% endif %}
+                 hx-post="/api/study/cc/auto"
+                 hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"month_toggle","value":"{{ i }}"}'
+                 hx-trigger="change"
+                 hx-target="#cc-auto-section"
+                 hx-swap="innerHTML"
+                 style="display:none" />
+          {{ mon_labels[i-1] }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <label class="toggle-wrap">
+        <input type="checkbox"
+               {% if entry.enabled %}checked{% endif %}
+               hx-post="/api/study/cc/auto"
+               hx-vals='{"action":"update_condition","id":"{{ entry.id }}","field":"enabled","value":"{% if entry.enabled %}false{% else %}true{% endif %}"}'
+               hx-trigger="change"
+               hx-target="#cc-auto-section"
+               hx-swap="innerHTML" />
+        <span class="toggle-track"></span>
+        <span class="toggle-label"></span>
+      </label>
+      <button hx-post="/api/study/cc/auto"
+              hx-vals='{"action":"delete_condition","id":"{{ entry.id }}"}'
+              hx-target="#cc-auto-section"
+              hx-swap="innerHTML"
+              class="row-delete-btn"
+              style="height:32px;width:32px;border-radius:8px;border:none;background:var(--bg);color:#1A1A1A;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Filters (gap + range + view + include events) -->
   <hr style="border:none;border-top:1px solid #EBEBEB;margin:24px 0 12px" />
   <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:4px">
     <div>

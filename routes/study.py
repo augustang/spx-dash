@@ -134,6 +134,8 @@ def _get_cc_store() -> dict:
     store.setdefault("auto_mode",        True)
     store.setdefault("tolerance",        0.20)
     store.setdefault("match_threshold",  0.75)
+    store.setdefault("auto_conditions",         [])
+    store.setdefault("auto_conditions_next_id",  0)
     _ensure_cc_split_filters(store)
     return store
 
@@ -178,6 +180,8 @@ def _cc_apply_filter_partial(store: dict, *, branch: str) -> None:
     gv = request.form.get("gap")
     if gv is not None and str(gv).strip() != "":
         store[gk] = gv
+        if branch == "auto":
+            store["_gap_auto_user_set"] = True
 
 
 def _cc_apply_set_view_partial(store: dict, *, branch: str) -> None:
@@ -958,6 +962,15 @@ def _build_cmp_charts_html(store) -> str:
 
 def _render_cc_auto(store):
     """Build and return the rendered auto-mode CC partial."""
+    if not store.get("_gap_auto_user_set"):
+        try:
+            today_5m = _get_today_5min_live()
+            pc = _lookup_today_prior_close()
+            if pc and not today_5m.empty:
+                today_open = float(today_5m["Open"].iloc[0])
+                store["gap_auto"] = "Gap up ↑" if today_open > pc else "Gap down ↓"
+        except Exception:
+            pass
     snap = _build_daily_snapshots()
     if snap.empty:
         n_badge_html, results_html = "", '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
@@ -969,6 +982,10 @@ def _render_cc_auto(store):
         gap_opts=_CMP_GAP_OPTS,
         n_badge_html=n_badge_html,
         results_html=results_html,
+        auto_cond_types=["Days from event", "Day of week", "Month"],
+        event_opts=_CC_EVENT_OPTS,
+        dow_labels=_CC_DOW_LABELS,
+        mon_labels=_CC_MON_LABELS,
     )
 
 
@@ -1015,6 +1032,50 @@ def api_cc_auto():
             _cc_apply_set_view_partial(store, branch="auto")
         elif action == 'include_event':
             _cc_apply_include_event_partial(store, branch="auto")
+        elif action == 'add_condition':
+            _AC_TYPES = ["Days from event", "Day of week", "Month"]
+            cid = store["auto_conditions_next_id"]
+            store["auto_conditions_next_id"] += 1
+            store["auto_conditions"].append({
+                "id": cid, "type": _AC_TYPES[0], "enabled": True,
+                "event": "VIX Exp", "days_min": -3, "days_max": 3,
+                "dow": list(range(5)), "months": list(range(1, 13)),
+            })
+        elif action == 'clear_conditions':
+            store["auto_conditions"] = []
+        elif action == 'delete_condition':
+            cid = int(request.form.get('id', -1))
+            store["auto_conditions"] = [e for e in store["auto_conditions"] if e["id"] != cid]
+        elif action == 'update_condition':
+            cid   = int(request.form.get('id', -1))
+            field = request.form.get('field')
+            value = request.form.get('value')
+            for entry in store["auto_conditions"]:
+                if entry["id"] == cid and field:
+                    if field in ("days_min", "days_max"):
+                        try: entry[field] = int(value)
+                        except (ValueError, TypeError): pass
+                    elif field == "enabled":
+                        entry["enabled"] = value == "true"
+                    elif field == "dow_toggle":
+                        idx = int(value)
+                        dow = list(entry.get("dow", []))
+                        if idx in dow: dow.remove(idx)
+                        else: dow.append(idx)
+                        entry["dow"] = sorted(dow)
+                    elif field == "month_toggle":
+                        mo = int(value)
+                        months = list(entry.get("months", []))
+                        if mo in months: months.remove(mo)
+                        else: months.append(mo)
+                        entry["months"] = sorted(months)
+                    elif field == "type":
+                        _AC_TYPES = ["Days from event", "Day of week", "Month"]
+                        if value in _AC_TYPES:
+                            entry["type"] = value
+                    elif field == "event":
+                        entry["event"] = value
+                    break
         _save_cc_store(store)
     return _render_cc_auto(store)
 
@@ -1269,14 +1330,17 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     tolerance     = float(store.get("tolerance", 0.5))
     threshold     = float(store.get("match_threshold", 0.5))
 
-    if not checkpoints:
+    if not checkpoints and threshold > 0:
         return "", (
             '<p style="font-size:13px;color:#aaa;padding:8px 0">'
             'No checkpoints yet — check back once the market opens.</p>'
         )
 
-    n_checkpoints = len(checkpoints)
-    scores = _score_days_against_checkpoints(snap, checkpoints, tolerance)
+    n_checkpoints = len(checkpoints) if checkpoints else 0
+    if n_checkpoints > 0:
+        scores = _score_days_against_checkpoints(snap, checkpoints, tolerance)
+    else:
+        scores = pd.Series(0, index=snap.index)
 
     rng_days = _CC_AUTO_RANGE_DAYS.get(store.get("range_auto", "8Y"))
     if rng_days:
@@ -1303,7 +1367,14 @@ def _build_cc_auto_results_html(store, snap) -> tuple:
     # Exclude today itself from historical matches
     scores = scores[scores.index != datetime.date.today()]
 
-    min_match     = max(1, int(np.ceil(threshold * n_checkpoints)))
+    # Apply auto conditions (Days from event / Day of week / Month)
+    auto_conds = store.get("auto_conditions", [])
+    if auto_conds:
+        cond_store = {"entries": auto_conds}
+        filtered_snap = _apply_cc_conditions(snap.loc[snap.index.isin(scores.index)], cond_store)
+        scores = scores[scores.index.isin(filtered_snap.index)]
+
+    min_match     = 0 if threshold == 0 else max(1, int(np.ceil(threshold * n_checkpoints)))
     matched_scores = scores[scores >= min_match].sort_values(ascending=False)
     matched        = snap.loc[matched_scores.index]
 
