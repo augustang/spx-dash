@@ -28,20 +28,7 @@
     </div></div>
   </div>
 
-  <!-- 3. Day filter (manual) -->
-  <div class="section-label">Day filter</div>
-  <div class="card mb-4">
-    <div class="card-body">
-      <div id="cc-manual-section"
-           hx-get="/api/study/cc/manual"
-           hx-trigger="load delay:300ms"
-           hx-swap="innerHTML">
-        <div class="loading-placeholder" style="height:100px">Loading…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4. Long-term chart -->
+  <!-- 3. Long-term chart -->
   <div class="section-label">Long-term chart</div>
   <div class="card mb-4">
     <div class="card-body">
@@ -166,7 +153,7 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
     target.innerHTML = '<div class="loading-placeholder" style="height:500px">Loading\u2026</div>';
   }
   // Dim CC sections while a request is in flight so users get feedback.
-  if (target && (target.id === 'cc-auto-section' || target.id === 'cc-manual-section')) {
+  if (target && target.id === 'cc-auto-section') {
     target.style.opacity = '0.45';
     target.style.pointerEvents = 'none';
   }
@@ -175,7 +162,7 @@ document.body.addEventListener('htmx:beforeRequest', function(e) {
 // Capture phase runs before base.html Plotly hydration on bubble.
 document.body.addEventListener('htmx:afterSwap', function(e) {
   var target = e.detail.target;
-  if (target && (target.id === 'cc-auto-section' || target.id === 'cc-manual-section')) {
+  if (target && target.id === 'cc-auto-section') {
     target.style.opacity = '';
     target.style.pointerEvents = '';
   }
@@ -184,21 +171,17 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 // Abort in-flight CC requests when a newer one starts to prevent pile-up
 // from rapid stepper clicks or filter changes.
 (function() {
-  var _autoXhr = null, _manualXhr = null;
+  var _autoXhr = null;
   document.body.addEventListener('htmx:beforeRequest', function(e) {
     var id = e.detail.target && e.detail.target.id;
     if (id === 'cc-auto-section') {
       if (_autoXhr) { try { _autoXhr.abort(); } catch(_) {} }
       _autoXhr = e.detail.xhr || null;
-    } else if (id === 'cc-manual-section') {
-      if (_manualXhr) { try { _manualXhr.abort(); } catch(_) {} }
-      _manualXhr = e.detail.xhr || null;
     }
   });
   document.body.addEventListener('htmx:afterRequest', function(e) {
     var id = e.detail.target && e.detail.target.id;
     if (id === 'cc-auto-section') _autoXhr = null;
-    else if (id === 'cc-manual-section') _manualXhr = null;
   });
 })();
 </script>

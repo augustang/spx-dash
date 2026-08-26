@@ -43,13 +43,11 @@ _CC_SNAP_TIMES = [(h, m) for h in range(9, 16) for m in (0, 30) if (h, m) >= (9,
 _CC_LOWTIME_ANCHOR_TIMES: tuple[datetime.time, ...] = tuple(
     datetime.time(h, m) for h, m in list(_CC_SNAP_TIMES) + [(16, 0)]
 )
-_CC_TIME_OPTS  = [f"{h}:{m:02d}" for h, m in _CC_SNAP_TIMES]
 _CC_COND_TYPES = ["% change at time", "Days from event", "Day of week", "Month", "Overnight gap"]
 _CC_EVENT_OPTS = ["OPEX", "VIX Exp", "FOMC"]
 _CC_DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 _CC_MON_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-_CC_NORM_OPTS  = ["% from prior close", "% from open"]
 
 _CMP_COLORS      = ["#B71AFF", "#4B7BFF", "#FF6B35", "#11B8A0",
                     "#FF3D54", "#F5A623", GREEN_400, "#888888"]
@@ -989,28 +987,6 @@ def _render_cc_auto(store):
     )
 
 
-def _render_cc_manual(store):
-    """Build and return the rendered manual-mode CC partial."""
-    # Force manual-mode result path by temporarily masking auto_mode
-    _real = store.get("auto_mode")
-    store["auto_mode"] = False
-    n_badge_html, results_html = _build_cc_results_html(store)
-    store["auto_mode"] = _real
-    return render_template('partials/cc_manual_section.html',
-        store=store,
-        cond_types=_CC_COND_TYPES,
-        event_opts=_CC_EVENT_OPTS,
-        time_opts=_CC_TIME_OPTS,
-        dow_labels=_CC_DOW_LABELS,
-        mon_labels=_CC_MON_LABELS,
-        range_opts=_CC_AUTO_RANGE_OPTS,
-        gap_opts=_CMP_GAP_OPTS,
-        norm_opts=_CC_NORM_OPTS,
-        n_badge_html=n_badge_html,
-        results_html=results_html,
-    )
-
-
 @study_bp.route('/api/study/cc/auto', methods=['GET', 'POST'])
 def api_cc_auto():
     store = _get_cc_store()
@@ -1078,80 +1054,6 @@ def api_cc_auto():
                     break
         _save_cc_store(store)
     return _render_cc_auto(store)
-
-
-@study_bp.route('/api/study/cc/manual', methods=['GET', 'POST'])
-def api_cc_manual():
-    store = _get_cc_store()
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'add':
-            cid = store["next_id"]
-            store["next_id"] += 1
-            store["ids"].append(cid)
-            store["entries"].append({
-                "id": cid, "type": _CC_COND_TYPES[0], "enabled": True,
-                "time": "11:00", "pct_min": 0.2, "pct_max": 0.4,
-                "event": "VIX Exp", "days_min": -3, "days_max": 3,
-                "gap_min": -1.0, "gap_max": 1.0,
-                "dow": list(range(5)), "months": list(range(1, 13)),
-            })
-        elif action == 'clear':
-            store["ids"] = []
-            store["entries"] = []
-        elif action == 'delete':
-            cid = int(request.form.get('id', -1))
-            store["entries"] = [e for e in store["entries"] if e["id"] != cid]
-            store["ids"]     = [i for i in store["ids"]     if i != cid]
-        elif action == 'update':
-            cid   = int(request.form.get('id', -1))
-            field = request.form.get('field')
-            value = request.form.get('value')
-            for entry in store["entries"]:
-                if entry["id"] == cid and field:
-                    if field in ("pct_min", "pct_max", "gap_min", "gap_max"):
-                        try:
-                            entry[field] = float(value)
-                        except (ValueError, TypeError):
-                            pass
-                    elif field in ("days_min", "days_max"):
-                        try:
-                            entry[field] = int(value)
-                        except (ValueError, TypeError):
-                            pass
-                    elif field == "enabled":
-                        entry["enabled"] = value == "true"
-                    elif field == "dow_toggle":
-                        idx = int(value)
-                        dow = list(entry.get("dow", []))
-                        if idx in dow:
-                            dow.remove(idx)
-                        else:
-                            dow.append(idx)
-                        entry["dow"] = sorted(dow)
-                    elif field == "month_toggle":
-                        mo = int(value)
-                        months = list(entry.get("months", []))
-                        if mo in months:
-                            months.remove(mo)
-                        else:
-                            months.append(mo)
-                        entry["months"] = sorted(months)
-                    elif field in ("dow", "months"):
-                        try:
-                            entry[field] = json.loads(value)
-                        except Exception:
-                            pass
-                    else:
-                        entry[field] = value
-        elif action == 'filter':
-            _cc_apply_filter_partial(store, branch="manual")
-        elif action == 'set_view':
-            _cc_apply_set_view_partial(store, branch="manual")
-        elif action == 'include_event':
-            _cc_apply_include_event_partial(store, branch="manual")
-        _save_cc_store(store)
-    return _render_cc_manual(store)
 
 
 def _compute_today_checkpoints() -> list:
@@ -1738,159 +1640,6 @@ def _cc_megachart_hist_figure(eod: pd.Series, pct_min: float | None, pct_max: fl
         ),
     )
     return histfig
-
-
-def _build_cc_results_html(store) -> tuple:
-    snap = _build_daily_snapshots()
-    if snap.empty:
-        return "", '<p style="font-size:12px;color:#888">No 5-min historical data available.</p>'
-
-    if store.get("auto_mode"):
-        return _build_cc_auto_results_html(store, snap)
-
-    if not store.get("ids"):
-        return "", '<p style="font-size:13px;color:#aaa;padding:2px 0 8px">Add a condition above to filter historical days.</p>'
-
-    matched = _apply_cc_conditions(snap, store)
-    # Apply time range filter (same buckets as historical overlay / auto CC)
-    rng_days = _CC_AUTO_RANGE_DAYS.get(store.get("range_manual", "All"))
-    if rng_days:
-        cutoff = datetime.date.today() - datetime.timedelta(days=rng_days)
-        matched = matched[matched.index >= cutoff]
-    # Apply overnight gap filter
-    gap_filter = store.get("gap_manual", "All")
-    if gap_filter == "Gap up ↑" and "gap_pct" in matched.columns:
-        matched = matched[matched["gap_pct"] > 0]
-    elif gap_filter == "Gap down ↓" and "gap_pct" in matched.columns:
-        matched = matched[matched["gap_pct"] < 0]
-    # Exclude event days not in the include list (whitelist — same logic as auto CC)
-    _event_col_map = {"FOMC": "days_from_fomc", "OPEX": "days_from_opex", "VIX Exp": "days_from_vix_exp"}
-    include_events = store.get("include_events_manual", [])
-    if "All" not in include_events:
-        for ev, col in _event_col_map.items():
-            if ev not in include_events and col in matched.columns:
-                on_event = matched[col].fillna(1) == 0
-                matched = matched[~on_event]
-    n = len(matched)
-    n_badge_html = _n_badge_html(n)
-    if n == 0:
-        return n_badge_html, ""
-
-    norm = "% from prior close"
-    eod_col = "eod_chg_pct" if norm == "% from prior close" else "eod_pct"
-    eod = matched[eod_col].dropna() if eod_col in matched.columns else matched["eod_pct"].dropna()
-    if eod.empty:
-        return n_badge_html, ""
-
-    mean = eod.mean()
-    med = eod.median()
-    ppos = (eod >= 0).mean() * 100
-    std = eod.std()
-
-    megachart_html = ""
-    today_pills_right = ""
-    session_low_caption = ""
-    lowtime_chart_html = ""
-    _ref = datetime.date(2000, 1, 3)
-    today_df = _get_today_5min_live()
-    today_prev_close = _lookup_today_prior_close(snap)
-
-    frd5 = _load_frd_5min()
-    ov_dates = sorted(matched.index.tolist(), reverse=True)
-    use_prev_close = norm == "% from prior close"
-
-    if not frd5.empty and ov_dates:
-        frd1 = _load_frd_daily()
-        show_historical = store.get("show_historical_manual", True)
-        line_color_filter = store.get("line_color_filter_manual", "all")
-        low_time_counts: Counter = Counter()
-        ofig = go.Figure()
-        all_oy: list[list[float]] = []
-        for od in ov_dates:
-            ots = pd.Timestamp(od)
-            odf = frd5.loc[ots : ots + pd.Timedelta(hours=23, minutes=59)]
-            odf = odf[odf.index.time <= datetime.time(16, 4)]
-            if odf.empty:
-                continue
-            low_time_counts[_snap_time_to_nearest_anchor(
-                odf["Low"].idxmin().time(), _CC_LOWTIME_ANCHOR_TIMES
-            )] += 1
-            ox = [datetime.datetime.combine(_ref, ts.time()) for ts in odf.index]
-            if use_prev_close:
-                pc = matched.loc[od, "prev_close"] if "prev_close" in matched.columns else None
-                base = float(pc) if pc is not None and not pd.isna(pc) else _prior_session_close(
-                    pd.Timestamp(od).date(), frd1, frd5
-                )
-            else:
-                base = float(odf["Open"].iloc[0])
-            if not base:
-                continue
-            oy = ((odf["Close"] / base - 1) * 100).round(2).tolist()
-            _cc_set_overlay_terminal_from_daily(
-                ox, oy,
-                ref_date=_ref,
-                trade_date=pd.Timestamp(od).date(),
-                base=base,
-                frd1=frd1,
-                frd5=frd5,
-                use_prev_close_norm=use_prev_close,
-            )
-            all_oy.append(oy)
-            ev = float(matched.loc[od, eod_col]) if eod_col in matched.columns else float(matched.loc[od, "eod_pct"])
-            is_green = ev >= 0
-            color_visible = (
-                line_color_filter == "all"
-                or (line_color_filter == "green" and is_green)
-                or (line_color_filter == "red" and not is_green)
-            )
-            trace_opacity = 0.4 if (color_visible and show_historical) else 0
-            today_equiv = (
-                [round(today_prev_close * (1 + p / 100), 2) for p in oy]
-                if today_prev_close else None
-            )
-            ofig.add_trace(go.Scatter(
-                x=ox, y=oy, mode="lines",
-                line=dict(color=GREEN_400 if is_green else "#FF3D54", width=0.9),
-                opacity=trace_opacity,
-                showlegend=False,
-                customdata=today_equiv,
-                hoverlabel=dict(font=dict(color="#1E1E1E" if is_green else "white")),
-                hoverinfo="skip" if trace_opacity == 0 else None,
-                hovertemplate=(
-                    (
-                        f"{_fmt_date(od)}: %{{y:+.2f}}%"
-                        + (" · %{customdata:,.2f}" if today_prev_close else "")
-                        + "<extra></extra>"
-                    )
-                    if trace_opacity > 0
-                    else None
-                ),
-            ))
-
-        today_added = _cc_add_today_trace(ofig, today_df, today_prev_close, _ref, all_oy)
-        ofig.add_hline(y=0, line_dash="dot", line_color="#C8C8C8", line_width=1)
-        pct_min, pct_max = _cc_finalize_overlay_layout(ofig, all_oy, today_prev_close, _ref)
-
-        lowtime_chart_html, session_low_caption = _cc_session_low_chart_bundle(
-            low_time_counts, _ref, "cc-manual-lowtime-chart"
-        )
-        histfig = _cc_megachart_hist_figure(eod, pct_min, pct_max)
-
-        if today_added:
-            today_pills_right = _CC_TODAY_LEGEND_HTML
-
-        megachart_html = _cc_megachart_row_html(
-            ofig, histfig, lowtime_chart_html, session_low_caption, "cc-manual",
-            f"{n} days matching manual filters",
-        )
-
-    pills_html = ""
-    if not eod.empty:
-        pills_html = _stat_pills_html(
-            mean, med, ppos, std, margin_top=24, right_html=today_pills_right
-        )
-
-    return n_badge_html, pills_html + megachart_html
 
 
 # ── Sections 5–8: Static sections ────────────────────────────────────────────
