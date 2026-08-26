@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "spx-dash",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-c", "from app import app; app.run(debug=True, port=8080)"],
+      "port": 8080
+    }
+  ]
+}
