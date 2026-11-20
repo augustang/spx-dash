@@ -193,15 +193,22 @@ def fetch_price_history(symbol="$SPX", period_type="day", period=1, freq_type="m
     return None
 
 
-def fetch_options_chain(symbol="$SPX"):
-    """Fetches the near-term Out-Of-The-Money puts."""
+def _today_et() -> str:
+    from datetime import datetime
+    import pytz
+    return datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+
+
+def _fetch_options_chain_raw(symbol: str) -> dict | None:
+    """Fetch today's OTM put chain for one symbol. Returns None on failure."""
     tokens = _load_tokens()
     if not tokens:
         return None
 
-    access_token = tokens['access_token']
+    access_token = tokens["access_token"]
     url = "https://api.schwabapi.com/marketdata/v1/chains"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+    today = _today_et()
 
     params = {
         "symbol": symbol,
@@ -209,7 +216,8 @@ def fetch_options_chain(symbol="$SPX"):
         "includeQuotes": "TRUE",
         "range": "OTM",
         "strikeCount": 90,
-        "daysToExpiration": 1
+        "fromDate": today,
+        "toDate": today,
     }
 
     response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
@@ -221,5 +229,58 @@ def fetch_options_chain(symbol="$SPX"):
         response = requests.get(url, headers=headers, params=params, timeout=(5, 30))
 
     if response.status_code == 200:
-        return response.json()
+        data = response.json()
+        if data.get("putExpDateMap"):
+            return data
+        print(f"⚠️  Options chain for {symbol}: empty putExpDateMap for {today}.")
+        return None
+
+    print(
+        f"⚠️  Options chain for {symbol}: HTTP {response.status_code} — "
+        f"{response.text[:200]}"
+    )
+    return None
+
+
+def _scale_chain_to_spx(chain: dict, scale: float) -> dict:
+    """Scale mini-index option strikes/prices (e.g. $XSP) up to SPX units."""
+    if scale == 1.0:
+        return chain
+
+    scaled = dict(chain)
+    new_puts = {}
+    for exp_key, strikes in chain.get("putExpDateMap", {}).items():
+        new_strikes = {}
+        for strike_str, contracts in strikes.items():
+            new_strike = str(float(strike_str) * scale)
+            new_contracts = []
+            for opt in contracts:
+                new_opt = dict(opt)
+                for field in ("bid", "ask", "last", "mark", "highPrice", "lowPrice"):
+                    if field in new_opt and new_opt[field]:
+                        new_opt[field] = new_opt[field] * scale
+                if "strikePrice" in new_opt and new_opt["strikePrice"]:
+                    new_opt["strikePrice"] = new_opt["strikePrice"] * scale
+                new_contracts.append(new_opt)
+            new_strikes[new_strike] = new_contracts
+        new_puts[exp_key] = new_strikes
+    scaled["putExpDateMap"] = new_puts
+    if chain.get("underlyingPrice"):
+        scaled["underlyingPrice"] = chain["underlyingPrice"] * scale
+    return scaled
+
+
+def fetch_options_chain(symbol="$SPX"):
+    """Fetches today's OTM put chain, normalized to SPX strike/price units."""
+    chain = _fetch_options_chain_raw(symbol)
+    if chain:
+        return chain
+
+    # Schwab sometimes returns 404/empty for $SPX while $XSP (mini-SPX, 1/10th) works.
+    if symbol == "$SPX":
+        print("↪️  Falling back to $XSP option chain (scaled ×10 to SPX units).")
+        xsp = _fetch_options_chain_raw("$XSP")
+        if xsp:
+            return _scale_chain_to_spx(xsp, 10.0)
+
     return None

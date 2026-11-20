@@ -5,8 +5,12 @@ the Render deployment always has the latest tokens without manual paste.
 from __future__ import annotations
 
 import json
-import requests
 import os
+import requests
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GIST_FILENAME = "schwab_tokens.json"
 
